@@ -1,0 +1,8 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "architecture-presenter",
+  "version": "1.0.0",
+  "description": "Evidence-backed offline architecture presenters with fixed-overview reveals and Microsoft-inspired stage styling.",
+  "repository": "https://github.com/timschps/architecture-presenter",
+  "keywords": ["architecture", "presenter", "diagrams", "skills"]
+}
