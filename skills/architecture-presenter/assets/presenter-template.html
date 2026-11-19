@@ -103,21 +103,23 @@ code { font: 12px Consolas, "Courier New", monospace; }
 #key-test { padding: 12px; background: var(--cp-surface-soft); min-height: 48px; }
 #notice { position: fixed; bottom: 116px; left: 50%; transform: translateX(-50%); max-width: min(600px, 90vw); background: var(--cp-panel); padding: 12px 20px; border: 1px solid var(--cp-border-strong); z-index: 20; }
 #blackout { position: fixed; inset: 0; background: var(--cp-blackout); z-index: 100; }
-html[data-present="true"] .shell { min-height: 0; padding: 0 32px; grid-template-rows: auto minmax(0, 1fr) auto; }
+html[data-present="true"] .shell { min-height: 0; max-width: none; padding: 0 32px; grid-template-rows: auto minmax(0, 1fr) auto; }
 html[data-present="true"] .toolbar { display: none; }
 html[data-present="true"] .toolbar .tabs, html[data-present="true"] .toolbar .tools,
 html[data-present="true"] .identity span, html[data-present="true"] .legend,
 html[data-present="true"] #play, html[data-present="true"] .stamp { display: none; }
 html[data-present="true"] .caption { padding: 8px 0 4px; }
-html[data-present="true"] h1 { font-size: clamp(24px, 2.1vw, 36px); }
+html[data-present="true"] h1 { font-size: clamp(24px, 3.33vh, 72px); }
+html[data-present="true"] .eyebrow { font-size: clamp(11px, 1.05vh, 24px); }
 html[data-present="true"] .takeaway { display: none; }
 html[data-present="true"] .canvas .node-detail, html[data-present="true"] .canvas .group-detail { display: none; }
 html[data-present="true"] .canvas .node-title:not(.stage-label) { display: none; }
-html[data-present="true"] .canvas .stage-label { display: block; font-size: 22px; }
+html[data-present="true"] .canvas .stage-label { display: block; font-size: 23px; }
 html[data-present="true"] .canvas .group-title { font-size: 20px; }
 html[data-present="true"] .canvas .future { opacity: 0; }
 html[data-present="true"] .stage-tools { display: flex; margin-left: auto; gap: 8px; }
-html[data-present="true"] .transport { padding-bottom: 12px; }
+html[data-present="true"] .transport { padding-bottom: 12px; font-size: clamp(12px, 1.3vh, 28px); }
+html[data-present="true"] .position { font-size: clamp(12px, 1.1vh, 24px); }
 html[data-present="true"] .progress, html[data-present="true"] .camera-tools { display: none; }
 html[data-present="true"] .drawing { grid-template-rows: auto minmax(0, 1fr); }
 html[data-present="true"] .controls { padding-top: 8px; }
@@ -129,9 +131,11 @@ html[data-present="true"] .canvas .node-state { font-size: 12px; }
 .implementation-key { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 3px 0; color: var(--cp-text-muted); font-size: 11px; }
 html[data-present="true"] .principle-strip { padding: 8px 16px; }
 html[data-present="true"] .principle-strip:has(.implementation-key) { display: grid; grid-template-columns: 1fr 1.5fr 1.5fr; column-gap: 24px; align-items: start; }
-html[data-present="true"] .principle-strip:has(.implementation-key) strong { font-size: 17px; }
-html[data-present="true"] .principle-strip:has(.implementation-key) .decision { font-size: 14px; }
-html[data-present="true"] .implementation-key { grid-column: 1 / -1; padding-top: 8px; }
+html[data-present="true"] .principle-strip:has(.implementation-key) { overflow-wrap: anywhere; }
+html[data-present="true"] .principle-strip:has(.implementation-key) strong { font-size: clamp(18px, 2.4vh, 60px); }
+html[data-present="true"] .principle-strip:has(.implementation-key) .decision,
+html[data-present="true"] .principle-strip:has(.implementation-key) .map-tradeoff { font-size: clamp(16px, 2vh, 50px); }
+html[data-present="true"] .implementation-key { grid-column: 1 / -1; padding-top: 8px; font-size: clamp(13px, 1.55vh, 40px); }
 html[data-present="true"] .inspector p, html[data-present="true"] .inspector li { font-size: 15px; }
 html[data-present="true"] .inspector .source-note { font-size: 11px; }
 html[data-present="true"][data-brand="ignite"] .caption { display: block; text-align: center; padding: 8px 0 4px; }
@@ -148,8 +152,8 @@ html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementat
 html[data-present="true"][data-brand="ignite"] .implementation-key { color: var(--cp-text); }
 html[data-present="true"][data-brand="ignite"] .group[data-plane] .group-title { text-anchor: middle; }
 @media (min-width: 901px) {
-  html[data-present="true"][data-brand="ignite"] .caption { height: 108px; }
-  html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementation-key) { height: 110px; }
+  html[data-present="true"][data-brand="ignite"] .caption { height: clamp(100px, 12vh, 260px); }
+  html[data-present="true"] .principle-strip:has(.implementation-key) { height: clamp(128px, 17.5vh, 420px); }
 }
 @media (max-width: 900px) {
   .shell { padding: 0 16px; height: auto; min-height: 100dvh; }
