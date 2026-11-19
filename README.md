@@ -28,6 +28,7 @@ required to generate or present it.
 - Principle, value, trade-off and evidence limits accompany each reveal.
 - Implemented, foundation, external and target states remain explicit.
 - Microsoft Fluent exploration and a separate deck-inspired stage skin.
+- Viewport-scaled stage typography with stable caption and ribbon space.
 - Manual-only zoom, contextual evidence, clicker controls, blackout and fullscreen.
 - Offline HTML plus SVG and editable Excalidraw companions.
 
@@ -64,9 +65,10 @@ npm test
 
 Browser tests need Microsoft Edge on Windows, or Playwright Chromium installed
 with `npx playwright install chromium` elsewhere. They open generated files
-offline and verify stable screen coordinates, reveals, manual zoom, escaping,
-source links, navigation, blackout and multiple viewports. Simulated keys do
-not replace actual clicker rehearsal.
+offline and verify stable screen coordinates, stage text and overflow at 720p,
+1080p and 4K, reveals, manual zoom, escaping, source links, navigation, blackout
+and narrow viewports. Check actual viewing distance and display readability in
+the room; simulated keys do not replace actual clicker rehearsal.
 
 This plugin has no hooks, agents, MCP servers, telemetry or automatic deployment.
 It is a private reusable implementation, not a Microsoft-endorsed product.
