@@ -60,18 +60,17 @@ const { pathToFileURL } = require('node:url');
     await page.goto(base);
     await page.waitForFunction(() => document.getElementById('phase-title').textContent);
     const views = await page.locator('[data-journey]').evaluateAll(nodes => nodes.map(n => n.dataset.journey));
-    const hasLocal = await page.evaluate(() => Object.hasOwn(window.presenterDesign.design.themes, 'midnight'));
-    const combinations = [
-      ...['explore', 'stage', 'stage-ribbon'].flatMap(layout =>
-        ['light', 'dark'].map(appearance => ({ layout, theme: 'fluent', appearance }))),
-      ...(hasLocal ? ['explore', 'stage', 'stage-ribbon', 'workshop'].map(layout =>
-        ({ layout, theme: 'midnight', appearance: 'dark' })) : []),
-    ];
-    for (const { layout, theme, appearance } of combinations) {
+    const catalog = await page.evaluate(() => window.presenterDesign.design);
+    const hasLocal = Object.hasOwn(catalog.themes, 'midnight');
+    const combinations = Object.entries(catalog.layouts).flatMap(([layout, definition]) =>
+      Object.entries(catalog.themes).flatMap(([theme, definitionTheme]) =>
+        Object.keys(definitionTheme.appearances).map(appearance =>
+          ({ layout, theme, appearance, presenting: definition.preset !== 'explore' }))));
+    for (const { layout, theme, appearance, presenting } of combinations) {
     for (const [width, height] of [[1280, 720], [1920, 1080], [3840, 2160]]) {
       await page.setViewportSize({ width, height });
       for (const view of views) {
-        await page.goto(`${base}?view=${view}&phase=1&details=0&present=${layout === 'explore' ? 0 : 1}&layout=${layout}&theme=${theme}&appearance=${appearance}`);
+        await page.goto(`${base}?view=${view}&phase=1&details=0&present=${presenting ? 1 : 0}&layout=${layout}&theme=${theme}&appearance=${appearance}`);
         const count = Number(await page.locator('#slider').getAttribute('max'));
         const initial = await firstGeometry();
         for (let phase = 1; phase <= count; phase++) {
@@ -106,7 +105,7 @@ const { pathToFileURL } = require('node:url');
             return result;
           });
           assert.deepEqual(issues, []);
-          if (layout !== 'explore') {
+          if (presenting) {
           const sizes = await page.evaluate(() => ({
             title: parseFloat(getComputedStyle(document.querySelector('#phase-title')).fontSize),
             heading: parseFloat(getComputedStyle(document.querySelector('#principle-strip strong')).fontSize),
@@ -177,7 +176,7 @@ const { pathToFileURL } = require('node:url');
     await page.locator('[data-close="journey-menu"]').click();
     await page.goto(`${base}?phase=1&theme=missing&layout=missing&appearance=missing`);
     assert.match(await page.locator('#notice').innerText(), /Unavailable theme.*Unavailable appearance.*Unavailable layout/);
-    await page.goto(`${base}?phase=1&brand=ignite`);
+    await page.goto(`${base}?phase=1&brand=missing-personal-theme`);
     assert.match(await page.locator('#notice').innerText(), /Unavailable theme/);
     await page.goto(`${base}?view=${views[0]}&phase=1&details=0`);
     await page.keyboard.down('ArrowRight');
