@@ -27,6 +27,8 @@ html[data-layout-preset="stage-ribbon"] .principle-strip:has(.implementation-key
   border-left: 1px solid var(--cp-divider); padding-left: 20px;
 }
 html[data-layout-preset="stage-ribbon"] .implementation-key { color: var(--cp-text); }
+html[data-commentary="false"] .drawing { grid-template-rows: auto minmax(0, 1fr); gap: 0; }
+html[data-commentary="false"][data-present="true"] .drawing { grid-template-rows: minmax(0, 1fr); }
 @media (min-width: 901px) {
   .caption { height: var(--cp-caption-height); overflow: auto; }
   .principle-strip { height: var(--cp-explanation-height); overflow: auto; }

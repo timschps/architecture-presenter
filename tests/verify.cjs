@@ -16,6 +16,8 @@ const { pathToFileURL } = require('node:url');
     const result = spawnSync('python', args, { encoding: 'utf8', env });
     assert.equal(result.status, 0, result.stderr);
   };
+  const mixedDecisionText = 'The source separates <request> input & runtime execution.';
+  let bareHtml;
   let html = process.argv[2] && path.resolve(process.argv[2]);
   if (!html) {
     run([path.join(root, 'skills', 'architecture-presenter', 'scripts', 'init.py'),
@@ -24,6 +26,32 @@ const { pathToFileURL } = require('node:url');
     const story = JSON.parse(fs.readFileSync(storyPath, 'utf8'));
     story.views = { system: story.views.architecture, principles: story.views.principles };
     story.views.system.phases[1].title = 'A deliberately longer title that wraps while the architecture remains in exactly the same position';
+    const plain = JSON.parse(JSON.stringify(story.views.system));
+    plain.label = 'Architecture only';
+    for (const phase of plain.phases) {
+      for (const key of ['principles', 'decisions', 'value', 'tradeoff', 'basis']) delete phase[key];
+    }
+    fs.writeFileSync(path.join(project, 'evidence.txt'),
+      'Synthetic test decision: separate acceptance from execution to keep review independent.');
+    plain.phases[0].evidence = ['evidence.txt'];
+    plain.components[0].evidence = ['evidence.txt'];
+    const mixed = JSON.parse(JSON.stringify(plain));
+    mixed.label = 'Optional decision context';
+    mixed.phases[1].principles = ['P2'];
+    mixed.phases[1].basis = 'inferred';
+    mixed.phases[2].decisions = [mixedDecisionText];
+    mixed.phases[2].basis = 'observed';
+    mixed.phases[4].value = 'Consider recording a reviewed architecture decision.';
+    mixed.phases[4].tradeoff = 'Decision records require review and maintenance.';
+    mixed.phases[4].basis = 'proposed';
+    story.views.plain = plain;
+    story.views.mixed = mixed;
+    story.principles.P1.basis = 'documented';
+    story.principles.P1.evidence = ['evidence.txt'];
+    story.views.system.phases[0].basis = 'documented';
+    story.views.system.phases[0].evidence = ['evidence.txt'];
+    delete story.principles.P2.basis;
+    delete story.views.system.phases[1].basis;
     fs.writeFileSync(storyPath, JSON.stringify(story));
     run([path.join(project, 'architecture', 'build.py'), '--input', storyPath,
       '--project-root', project, '--output', path.join(project, 'architecture')]);
@@ -43,6 +71,14 @@ const { pathToFileURL } = require('node:url');
     run([path.join(project, 'architecture', 'build.py'), '--input', storyPath,
       '--project-root', project, '--output', path.join(project, 'architecture'),
       '--stage-theme', 'project:midnight', '--stage-layout', 'project:workshop']);
+    const bareStory = { ...story, views: { plain } };
+    delete bareStory.principles;
+    delete bareStory.insights;
+    const bareStoryPath = path.join(project, 'architecture', 'bare-story.json');
+    fs.writeFileSync(bareStoryPath, JSON.stringify(bareStory));
+    run([path.join(project, 'architecture', 'build.py'), '--input', bareStoryPath,
+      '--project-root', project, '--output', path.join(project, 'bare')]);
+    bareHtml = path.join(project, 'bare', 'presenter.html');
   }
   const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : undefined });
   try {
@@ -78,6 +114,36 @@ const { pathToFileURL } = require('node:url');
           assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'), '0 0 1490 700');
           assert.equal(await page.locator('.group.future').count(), 0);
           assert.deepEqual(await firstGeometry(), initial, `${view}/${phase}: stable screen coordinates at ${width}`);
+          if (view === 'plain' && !process.argv[2]) {
+            assert.equal(await page.locator('#principle-strip').isVisible(), false);
+            assert.equal(await page.locator('html').getAttribute('data-commentary'), 'false');
+            assert.equal(await page.locator('#status-key').isVisible(), true);
+            assert.doesNotMatch(await page.locator('#panel').textContent(), /Decision context|Requirement:|undefined/i);
+          }
+          if (view === 'mixed' && !process.argv[2]) {
+            const activeCommentary = [2, 3, 5].includes(phase);
+            assert.equal(await page.locator('#principle-strip').isVisible(), activeCommentary);
+            assert.equal(await page.locator('#principle-strip').getAttribute('aria-hidden'), String(!activeCommentary));
+            assert.equal(await page.locator('#principle-context').count(), activeCommentary ? 1 : 0);
+            assert.equal(await page.locator('#principle-strip').evaluate(strip => strip.inert), !activeCommentary);
+            if (activeCommentary) {
+              const label = { 2: /Inferred rationale/, 3: /Source observation/, 5: /Suggested lens/ }[phase];
+              assert.match(await page.locator('#principle-strip .basis-label').innerText(), label);
+            }
+            if (phase === 3) {
+              assert.equal(await page.locator('#principle-strip .decision').innerText(), mixedDecisionText);
+              assert.equal(await page.locator('#principle-strip request').count(), 0);
+              assert.match(await page.locator('#panel').textContent(), /Source observation, not recorded intent/);
+            }
+            if (phase === 5) {
+              assert.match(await page.locator('#panel').textContent(), /Suggested lens, not an approved principle/);
+              assert.match(await page.locator('#panel').textContent(), /Decision records require review and maintenance/);
+            }
+          }
+          if (view === 'system' && !process.argv[2] && phase <= 2) {
+            assert.equal(await page.locator('#principle-strip .basis-label').innerText(),
+              phase === 1 ? 'Documented rationale' : 'Basis not recorded');
+          }
           const issues = await page.evaluate(() => {
             const result = [];
             if (document.documentElement.dataset.present === 'true') {
@@ -106,16 +172,21 @@ const { pathToFileURL } = require('node:url');
           });
           assert.deepEqual(issues, []);
           if (presenting) {
-          const sizes = await page.evaluate(() => ({
-            title: parseFloat(getComputedStyle(document.querySelector('#phase-title')).fontSize),
-            heading: parseFloat(getComputedStyle(document.querySelector('#principle-strip strong')).fontSize),
-            content: parseFloat(getComputedStyle(document.querySelector('#principle-strip .decision')).fontSize),
-            key: parseFloat(getComputedStyle(document.querySelector('#principle-strip .implementation-key')).fontSize),
-          }));
+          const sizes = await page.evaluate(() => {
+            const size = selector => {
+              const element = document.querySelector(selector);
+              return element ? parseFloat(getComputedStyle(element).fontSize) : null;
+            };
+            return {
+              title: size('#phase-title'), heading: size('#principle-strip strong'),
+              content: size('#principle-strip .decision'),
+              key: size('#principle-strip .implementation-key, #status-key:not([hidden])'),
+            };
+          });
           assert.ok(sizes.title >= height * 0.032, `${view}/${phase}: stage title size at ${width}`);
-          assert.ok(sizes.heading >= height * 0.023, `${view}/${phase}: stage ribbon heading size at ${width}`);
-          assert.ok(sizes.content >= height * 0.019, `${view}/${phase}: stage ribbon text size at ${width}`);
-          assert.ok(sizes.key >= height * 0.015, `${view}/${phase}: stage status key size at ${width}`);
+          if (sizes.heading !== null) assert.ok(sizes.heading >= height * 0.023, `${view}/${phase}: stage ribbon heading size at ${width}`);
+          if (sizes.content !== null) assert.ok(sizes.content >= height * 0.019, `${view}/${phase}: stage ribbon text size at ${width}`);
+          if (sizes.key !== null) assert.ok(sizes.key >= height * 0.015, `${view}/${phase}: stage status key size at ${width}`);
           }
           if (phase < count) await page.keyboard.press('PageDown');
         }
@@ -135,6 +206,20 @@ const { pathToFileURL } = require('node:url');
         await page.screenshot({ path: path.join(temp, `${layout}-${theme}-${appearance}-${view}-${width}.png`) });
       }
     }
+    }
+    if (bareHtml) {
+      await page.goto(`${pathToFileURL(bareHtml).href}?view=plain&phase=1&details=0`);
+      assert.equal(await page.locator('#principle-strip').isVisible(), false);
+      assert.equal(await page.locator('#status-key').isVisible(), true);
+      await page.keyboard.press('KeyC');
+      assert.equal(await page.locator('#inspector').isVisible(), true);
+      assert.match(await page.locator('#panel').innerText(), /Repository evidence/i);
+      assert.doesNotMatch(await page.locator('#panel').innerText(), /Decision context|Requirement:|undefined/i);
+      assert.ok(await page.locator('#panel a[href$="/blob/main/evidence.txt"]').count());
+      await page.locator('.node:not(.future):not(.gone)').first().click();
+      assert.match(await page.locator('#panel').innerText(), /Implementation state: TARGET/);
+      assert.match(await page.locator('#panel').innerText(), /Component evidence/i);
+      assert.ok(await page.locator('#panel a[href$="/blob/main/evidence.txt"]').count());
     }
     for (const theme of ['light', 'dark']) {
       await page.goto(`${base}?view=${views[0]}&phase=1&present=0&brand=fluent&scoutTheme=${theme}&details=0`);
@@ -192,16 +277,26 @@ const { pathToFileURL } = require('node:url');
     await page.locator('[data-close="settings"]').click();
     await page.keyboard.press('KeyN');
     assert.equal(await page.locator('#slider').inputValue(), '3');
-    await page.locator('#principle-context').click();
-    assert.match(await page.locator('#panel').innerText(), /Requirement:.*Trade-off:.*Evidence limit:/s);
+    if (await page.locator('#principle-context').count()) {
+      await page.locator('#principle-context').click();
+      if (await page.locator('#panel .principle-chain').count())
+        assert.match(await page.locator('#panel').innerText(), /Requirement:.*Trade-off:.*Evidence limit:/s);
+      else assert.match(await page.locator('#panel').innerText(), /Decision context/i);
+    } else {
+      await page.keyboard.press('KeyC');
+      assert.match(await page.locator('#panel').innerText(), /Repository evidence/i);
+      assert.doesNotMatch(await page.locator('#panel').innerText(), /Decision context|Requirement:|undefined/i);
+    }
     await page.locator('#context-close').click();
     await page.goto(`${base}?view=missing&phase=-99&brand=invalid&focus=missing`);
     assert.equal(await page.locator('#slider').inputValue(), '1');
     assert.match(await page.locator('#notice').innerText(), /not active/);
     await page.setViewportSize({ width: 390, height: 844 });
     for (const layout of ['explore', 'stage', 'stage-ribbon']) {
-      await page.goto(`${base}?view=${views[0]}&present=${layout === 'explore' ? 0 : 1}&details=0&layout=${layout}`);
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), layout);
+      for (const view of views) {
+        await page.goto(`${base}?view=${view}&present=${layout === 'explore' ? 0 : 1}&details=0&layout=${layout}`);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), layout);
+      }
     }
     await page.goto(`${base}?view=${views[0]}&phase=1`);
     await page.evaluate(() => { document.documentElement.requestFullscreen = () => Promise.reject(new Error('Test denial')); });

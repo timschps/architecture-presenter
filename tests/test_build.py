@@ -71,6 +71,53 @@ class PresenterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "predates"):
             self.generate()
 
+    def test_principles_and_decisions_can_be_omitted_or_empty(self):
+        for empty in (False, True):
+            with self.subTest(empty=empty):
+                self.story = create_story("Architecture only")
+                if empty:
+                    self.story["principles"] = {}
+                else:
+                    self.story.pop("principles")
+                for view in self.story["views"].values():
+                    for phase in view["phases"]:
+                        for key in ("principles", "decisions", "value", "tradeoff", "basis"):
+                            phase.pop(key, None)
+                        if empty:
+                            phase.update(principles=[], decisions=[])
+                self.assertIn("Architecture only", self.generate())
+
+    def test_explicit_references_still_require_a_definition(self):
+        self.story.pop("principles")
+        with self.assertRaisesRegex(ValueError, "known principles"):
+            self.generate()
+
+    def test_standalone_decisions_and_explicit_basis_are_supported(self):
+        self.story.pop("principles")
+        for view in self.story["views"].values():
+            for phase in view["phases"]:
+                phase.pop("principles")
+                phase["basis"] = "inferred"
+        self.assertIn('"basis": "inferred"', self.generate())
+        phase = self.story["views"]["architecture"]["phases"][0]
+        phase["basis"] = "invented"
+        with self.assertRaisesRegex(ValueError, "basis"):
+            self.generate()
+
+    def test_invalid_optional_collections_and_principle_basis_are_rejected(self):
+        phase = self.story["views"]["architecture"]["phases"][0]
+        for key in ("principles", "decisions"):
+            for value in (None, "P1", [1], [{}]):
+                with self.subTest(key=key, value=value):
+                    original = phase[key]
+                    phase[key] = value
+                    with self.assertRaisesRegex(ValueError, "array of strings"):
+                        self.generate()
+                    phase[key] = original
+        self.story["principles"]["P1"]["basis"] = "approved"
+        with self.assertRaisesRegex(ValueError, "basis"):
+            self.generate()
+
     def test_all_boundaries_are_required_from_start(self):
         self.story["views"]["architecture"]["groups"][0]["phase"] = 2
         with self.assertRaisesRegex(ValueError, "boundaries"):

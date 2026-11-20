@@ -25,12 +25,19 @@ required to generate or present it.
 - Fixed camera and stable component positions through reveals.
 - Responsibility boundaries visible from the first reveal.
 - Concrete components and typed artifact/data/identity handoffs.
-- Principle, value, trade-off and evidence limits accompany each reveal.
+- Optional decision/principle context distinguishes documented rationale,
+  observations, inferences, and suggestions, without inventing missing ADRs.
 - Implemented, foundation, external and target states remain explicit.
 - Microsoft Fluent by default, with independent theme, layout and appearance choices.
 - Viewport-scaled stage typography with stable caption and ribbon space.
 - Manual-only zoom, contextual evidence, clicker controls, blackout and fullscreen.
 - Offline HTML plus SVG and editable Excalidraw companions.
+
+No ADRs or declared principles are required. Omit absent rationale and show
+the architecture with source evidence alone. Commentary-free journeys have
+no ribbon; mixed journeys keep the map stable while commentary appears or
+disappears. See the [content contract](skills/architecture-presenter/references/DATA_CONTRACT.md#principles-and-learnings)
+for basis labels and optional fields.
 
 Choose Explore, Stage, or Stage Ribbon independently of branding. Define local
 JSON themes and preset-based layouts at project, repository, user, or machine

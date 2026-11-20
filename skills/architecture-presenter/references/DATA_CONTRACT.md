@@ -1,6 +1,8 @@
 # Data contract
 
-`story.json` is a JSON object with `project`, `views`, `principles`, `insights`.
+`story.json` is a JSON object with `project`, `views`, optional `principles`,
+and optional `insights`. Omitted principles mean `{}`; omitted insights mean
+`{"items": []}`. ADRs and pre-existing architecture principles are not prerequisites.
 The bootstrap generates a complete editable example. Coordinates are native
 1490x700 SVG units; nodes are 76 units high. No implicit coordinate scaling.
 
@@ -15,8 +17,10 @@ geometry. See [Design system](DESIGN_SYSTEM.md).
 - `title`, `label` (tab/menu title), `description`, `scope`, `snapshot`,
   `stepLabel`, `repository` (owner/name), `revision` (source commit).
 - `phases`: consecutive `n` starting at 1, `title`, `dates`, `summary`,
-  `decisions` array, `principles` array, `commits` array, `evidence` array.
-  Optional `value`, `tradeoff`, `issues`, `status`, `references`.
+  `commits` array, `evidence` array.
+  Optional `decisions` array, `principles` array, `value`, `tradeoff`, `basis`,
+  `issues`, `status`, `references`. Omit or use empty arrays for absent decisions
+  and principle references. Explicit references must name existing principles.
 - `groups`, `components`, `flows` as below.
 
 The first journey is the default. Do not create journeys with empty content.
@@ -41,14 +45,63 @@ TARGET handoffs must have `state: "TARGET"` for dashed styling.
 
 ## Principles and learnings
 
-`principles`: map of IDs to `name`, `attributes`, `requirement`, `decision`,
-`tradeoff`, `verification`, `scope`, `evidence`. Every phase references at least
-one existing principle. Keep a reusable lens distinct from a project claim.
+`principles`: optional map of IDs to `name`, `attributes`, `requirement`,
+`decision`, `tradeoff`, `verification`, `scope`, `evidence`, optional `basis`.
+No phase is required to reference a principle. Keep a reusable analytical lens
+distinct from an approved project principle.
+
+`basis` on a principle or phase describes its commentary:
+
+| Value | Meaning |
+| --- | --- |
+| `documented` | Recorded rationale, cite the decision/principle source in evidence |
+| `observed` | What source/config/tests show, not evidence of original intent |
+| `inferred` | An explicitly inferred explanation, not a recorded decision |
+| `proposed` | A suggested lens or proposal, not an approved principle |
+
+Omitted basis displays "Basis not recorded", preserving legacy stories without
+claiming approval. A phase basis labels its ribbon context; otherwise that
+context uses its first principle's basis. Inspector principle entries retain
+their own basis and decision entries use the phase's basis.
+Basis is author-supplied. The generator validates its value and local evidence
+paths, not whether a cited source actually records a decision or its motivation.
+Verify that distinction before choosing `documented`.
+
+With no referenced principle, explicit `decisions`, `value`, or `tradeoff` can
+provide standalone decision context. Omit all of them for an architecture-only
+reveal. `summary` and component evidence remain available without inventing
+requirements, trade-offs, ADRs, or organizational principles.
+
+For example, an architecture-only phase can be:
+
+```json
+{
+  "n": 1,
+  "title": "Request entry point",
+  "dates": "Source snapshot",
+  "summary": "The handler accepts a request and passes it to the worker.",
+  "commits": [],
+  "evidence": ["src/handler.py", "src/worker.py"]
+}
+```
+
+Replace these example paths with actual project evidence. If useful, add
+`"decisions": ["Separating acceptance from execution may simplify retries."]`
+and `"basis": "inferred"` as an explicitly analytical explanation, not a claim
+that a historical decision was recorded.
+
+A journey without commentary has no ribbon or reserved ribbon space, with the
+implementation-state key in the footer. Mixed journeys reserve stable space
+across reveals; empty reveals have an invisible, inert commentary slot, not
+fabricated text. Journey or explicit layout changes may resize the map, but
+advancing reveals must not.
 
 `insights`: `items` array, empty unless historical evidence exists.
 Optional entries use `id`, `title`, `lesson`, `voiceover`, `targets` keyed by
 journey, optional `availableFrom`, and `sources` as supported by the template.
 Suggested narration must not be presented as a quotation or measured outcome.
+If no historical evidence is available, omit insights rather than synthesizing
+lessons. Reading source alone does not establish historical motivation.
 
 ## Evidence and safety
 

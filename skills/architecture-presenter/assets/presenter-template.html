@@ -87,6 +87,9 @@ html[data-details="true"] .workbench { grid-template-columns: minmax(0, 1fr) 360
 .principle-strip p { margin: 3px 0; color: var(--cp-text-muted); font-size: 13px; }
 .principle-strip .decision { color: var(--cp-text); }
 .principle-strip button { padding: 0; background: none; border: 0; color: inherit; text-align: left; }
+.principle-strip[data-active="false"] { visibility: hidden; }
+.basis-label { display: block; color: var(--cp-text-muted); font-size: 11px; font-weight: 400; }
+html[data-present="true"] .basis-label { font-size: clamp(11px, 1.15vh, 28px); }
 .principle-chain { margin: 12px 0 20px; padding-left: 14px; border-left: 3px solid var(--cp-accent); }
 .principle-chain h3 { margin-top: 16px; }
 .camera-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
@@ -228,7 +231,7 @@ __LAYOUTS__
         <button id="evidence-open" type="button" aria-controls="inspector" aria-expanded="false">Context &amp; learnings</button>
         <span class="hint">Click a component or flow. Ctrl+wheel to zoom, drag to pan.</span>
       </div>
-      <section class="principle-strip" id="principle-strip" aria-label="Architectural principle"></section>
+      <section class="principle-strip" id="principle-strip" aria-label="Architecture commentary"></section>
       <div class="canvas" id="canvas" tabindex="-1" aria-label="Architecture diagram">__SVG__</div>
     </main>
     <aside class="inspector" id="inspector" aria-labelledby="context-title">
@@ -238,6 +241,7 @@ __LAYOUTS__
     </aside>
   </div>
   <footer class="transport">
+    <div class="implementation-key" id="status-key" aria-label="Implementation status key" hidden></div>
     <div class="progress"><input id="slider" type="range" min="1" step="1" aria-label="Reveal"><output id="position" for="slider" aria-live="polite"></output></div>
     <div class="controls">
       <button id="prev" type="button" aria-label="Previous reveal">Previous</button>
@@ -316,6 +320,14 @@ const isPresenting = () => root.dataset.present === "true";
 const itemFor = id => [...DATA.components, ...DATA.flows, ...DATA.groups].find(item => item.id === id);
 const elementFor = id => [...canvas.querySelectorAll("[data-inspect]")].find(element => element.id === id);
 const active = item => item.phase <= current && (!item.until || current <= item.until);
+const hasCommentary = phase => Boolean((phase.principles || []).length || (phase.decisions || []).length || phase.value || phase.tradeoff);
+const basisLabel = basis => ({
+  documented: "Documented rationale",
+  observed: "Source observation, not recorded intent",
+  inferred: "Inferred rationale, not a recorded decision",
+  proposed: "Suggested lens, not an approved principle",
+})[basis] || "Basis not recorded";
+const statusKey = '<span>APP: application implementation</span><span>SOURCE: implemented contract</span><span>FOUNDATION: recorded infrastructure</span><span>EXTERNAL: external responsibility</span><span>TARGET + dashed: not commissioned</span>';
 
 function syncUrl() {
   const url = new URL(location.href);
@@ -357,6 +369,7 @@ function renderEvidence(phase) {
   const principleNotes = (origin.principles || []).map(id => {
     const p = PRINCIPLES[id];
     return `<section class="principle-chain" data-principle="${esc(id)}"><h3>${esc(id)} / ${esc(p.name)}</h3>
+      <p class="source-note">${esc(basisLabel(p.basis))}</p>
       <p><b>Quality attributes:</b> ${esc(p.attributes)}</p>
       <p><b>Requirement:</b> ${esc(p.requirement)}</p><p><b>Decision:</b> ${esc(p.decision)}</p>
       <p><b>Trade-off:</b> ${esc(p.tradeoff)}</p><p><b>Verification:</b> ${esc(p.verification)}</p>
@@ -371,8 +384,12 @@ function renderEvidence(phase) {
     <p class="hint">Introduced in ${esc(DATA.stepLabel.toLowerCase())} ${item.phase}: ${esc(origin.title)}.</p>
     ${item.from ? `<p>${inspectLink(itemFor(item.from))} &rarr; ${inspectLink(itemFor(item.to))}</p>` : ""}` : `<p class="hint">${esc(phase.status || phase.dates)}</p><h3>What changed</h3><p>${esc(phase.summary)}</p>`}
     ${principleNotes}
-    ${learningNotes || (item ? '<p class="hint">No session-specific learning is attached to this selection. The details below are repository-derived reveal evidence.</p>' : "")}
-    <h3>${item ? "Decisions in its introduction reveal" : "Decisions"}</h3><ul>${origin.decisions.map(text => `<li>${esc(text)}</li>`).join("")}</ul>
+    ${learningNotes}
+    ${(origin.decisions || []).length || origin.value || origin.tradeoff ? `<h3>${item ? "Decision context in its introduction reveal" : "Decision context"}</h3>
+      <p class="source-note">${esc(basisLabel(origin.basis))}</p>
+      ${origin.value ? `<p><b>Value:</b> ${esc(origin.value)}</p>` : ""}
+      ${(origin.decisions || []).length ? `<ul>${origin.decisions.map(text => `<li>${esc(text)}</li>`).join("")}</ul>` : ""}
+      ${origin.tradeoff ? `<p><b>Trade-off:</b> ${esc(origin.tradeoff)}</p>` : ""}` : ""}
     ${!item ? `<h3>Introduced in this reveal</h3>${added.length ? `<ul>${added.map(node => `<li>${inspectLink(node)}</li>`).join("")}</ul>` : "<p>Existing components and boundaries change.</p>"}` : ""}
     <h3>Repository evidence for this reveal</h3><div class="sources">${origin.commits.map(hash => `<a href="${base}/commit/${esc(hash)}" target="_blank" rel="noopener noreferrer"><code>${esc(hash)}</code></a>`).join("")}
     ${(origin.issues || []).map(n => `<a href="${base}/issues/${n}" target="_blank" rel="noopener noreferrer">Issue #${n}</a>`).join("")}</div>
@@ -479,13 +496,31 @@ function render() {
   });
   document.getElementById("eyebrow").textContent = `${JOURNEYS[view]} / ${DATA.stepLabel} ${current}`;
   document.getElementById("phase-title").textContent = phase.title;
-  document.getElementById("takeaway").textContent = phase.value || phase.decisions[0];
-  const principle = PRINCIPLES[phase.principles[0]];
-  document.getElementById("principle-strip").innerHTML = `<button type="button" id="principle-context" aria-controls="inspector"><strong>${esc(phase.principles[0])} / ${esc(principle.name)}</strong></button>
-    <p class="decision">${phase.value ? `<b>Value:</b> ${esc(phase.value)}` : `${esc(principle.requirement)} &rarr; ${esc(principle.decision)}`}</p>
-    <p class="tradeoff ${phase.tradeoff ? "map-tradeoff" : ""}"><b>Trade-off:</b> ${esc(phase.tradeoff || principle.tradeoff)}</p>
-    ${DATA.components.some(node => node.state) ? '<div class="implementation-key" aria-label="Implementation status key"><span>APP: application implementation</span><span>SOURCE: implemented contract</span><span>FOUNDATION: recorded infrastructure</span><span>EXTERNAL: external responsibility</span><span>TARGET + dashed: not commissioned</span></div>' : ""}`;
-  document.getElementById("principle-context").addEventListener("click", () => { overview(); setDetails(true); });
+  document.getElementById("takeaway").textContent = phase.value || (phase.decisions || [])[0] || phase.summary;
+  const principleId = (phase.principles || [])[0];
+  const principle = PRINCIPLES[principleId];
+  const journeyHasCommentary = DATA.phases.some(hasCommentary);
+  const activeCommentary = hasCommentary(phase);
+  const hasStates = DATA.components.some(node => node.state);
+  root.dataset.commentary = String(journeyHasCommentary);
+  const strip = document.getElementById("principle-strip");
+  strip.hidden = !journeyHasCommentary;
+  strip.dataset.active = String(activeCommentary);
+  strip.inert = !activeCommentary;
+  strip.setAttribute("aria-hidden", String(!activeCommentary));
+  const decision = phase.value ? `<b>Value:</b> ${esc(phase.value)}` : principle
+    ? `${esc(principle.requirement)} &rarr; ${esc(principle.decision)}` : esc((phase.decisions || [])[0] || "");
+  const tradeoff = phase.tradeoff || principle?.tradeoff;
+  strip.innerHTML = activeCommentary ? `<button type="button" id="principle-context" aria-controls="inspector">
+      <strong>${principle ? `${esc(principleId)} / ${esc(principle.name)}` : "Decision context"}</strong>
+      <span class="basis-label">${esc(basisLabel(phase.basis || principle?.basis))}</span></button>
+    ${decision ? `<p class="decision">${decision}</p>` : ""}
+    ${tradeoff ? `<p class="tradeoff map-tradeoff"><b>Trade-off:</b> ${esc(tradeoff)}</p>` : ""}
+    ${hasStates ? `<div class="implementation-key" aria-label="Implementation status key">${statusKey}</div>` : ""}` : "";
+  document.getElementById("principle-context")?.addEventListener("click", () => { overview(); setDetails(true); });
+  const footerKey = document.getElementById("status-key");
+  footerKey.hidden = journeyHasCommentary || !hasStates;
+  footerKey.innerHTML = footerKey.hidden ? "" : statusKey;
   const stamp = document.getElementById("stamp");
   stamp.textContent = `${phase.status || "Repository-grounded"} | ${phase.dates}`;
   stamp.classList.toggle("local", Boolean(phase.status));

@@ -26,6 +26,15 @@ Do not claim measured SLOs, WAF certification, isolation, provenance, execution,
 cost savings, or release approval from code or templates alone.
 Principles are causal chains, not decorative labels:
 requirement -> decision -> value -> trade-off -> verification -> evidence limit.
+They are optional. A project without ADRs or declared principles can be shown
+using source evidence alone. Label documented rationale, source observations,
+inferences and proposed lenses distinctly. Never turn a source observation into
+a claim about recorded intent, approval, or historical lessons.
+
+Omit absent decision commentary. A commentary-free journey has no ribbon.
+Mixed journeys keep a stable reserved slot, invisible and unfocusable on
+reveals without commentary. Keep implementation-state labels and source
+inspection available regardless of rationale coverage.
 
 ## Visuals
 

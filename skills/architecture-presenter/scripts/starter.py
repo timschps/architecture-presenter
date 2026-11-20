@@ -17,7 +17,7 @@ def create_story(name):
                  requirement="Replace with a verified project requirement.",
                  decision=decision, tradeoff=tradeoff,
                  verification="Replace with the actual test or evidence.",
-                 scope="Synthetic example only. No operational claims.", evidence=[])
+                 scope="Synthetic example only. No operational claims.", evidence=[], basis="proposed")
         for id, title, decision, tradeoff in lenses
     }
     positions = [
@@ -50,7 +50,7 @@ def create_story(name):
     phases = [
         dict(n=i, title=title, dates="Synthetic example", summary="Replace with project-specific causal explanation.",
              decisions=[decision], principles=[id], commits=[], evidence=[],
-             value=decision, tradeoff=tradeoff)
+             value=decision, tradeoff=tradeoff, basis="proposed")
         for i, (id, title, decision, tradeoff) in enumerate(lenses, 1)
     ]
     architecture = dict(title=name, label="Architecture build-up",

@@ -42,8 +42,17 @@ broader visual guidance, but must not generate a competing presenter engine.
    [Data contract](references/DATA_CONTRACT.md). Use short concrete stage labels,
    source files per component, exact artifact/identity handoffs, and deliberate
    reveal order. All boundaries start at reveal 1; endpoints precede their flows.
-   Add principles with requirement, quality attributes, decision, value,
-   trade-off, verification and evidence limit. Do not invent historical lessons.
+   Principles and ADRs are optional inputs, not prerequisites. Use documented
+   decisions/principles when available and cite their evidence. Source/config/
+   tests establish what exists, not why it was chosen. Never invent motivation
+   or approved organizational principles to fill the presenter.
+   Add principle commentary only when useful, with requirement, quality
+   attributes, decision, trade-off, verification and evidence limit. Set
+   `basis` to documented, observed, inferred or proposed as appropriate;
+   explicitly label inferred explanations and suggested lenses. Omit absent
+   principles/decisions or use empty collections. With no commentary, the
+   renderer shows architecture and evidence without a forced ribbon.
+   Keep historical insights empty unless supported by evidence.
 5. Follow the [Design system](references/DESIGN_SYSTEM.md) for styling. Keep
    theme, layout and light/dark appearance separate. Default to Fluent with
    Explore and Stage Ribbon; never infer or force a personal/event theme.

@@ -81,11 +81,21 @@ def evidence_exists(path: str, project_root: Path) -> bool:
     return target.is_relative_to(project_root) and target.exists()
 
 
+def validate_basis(item: dict[str, Any], context: str) -> None:
+    if "basis" in item and item["basis"] not in ("documented", "observed", "inferred", "proposed"):
+        raise ValueError(f"{context}: basis must be documented, observed, inferred, or proposed.")
+
+
 def validate_data(data: dict[str, Any], project_root: Path) -> dict[str, Any]:
     count = len(data["phases"])
     if not count or [p["n"] for p in data["phases"]] != list(range(1, count + 1)):
         raise ValueError("Phase numbers must be consecutive, starting at 1.")
     for phase in data["phases"]:
+        validate_basis(phase, f"Phase {phase['n']}")
+        for key in ("principles", "decisions"):
+            values = phase.get(key, [])
+            if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                raise ValueError(f"Phase {phase['n']}: {key} must be an array of strings when provided.")
         for path in phase["evidence"]:
             if not evidence_exists(path, project_root):
                 raise ValueError(f"Phase {phase['n']}: missing repository evidence {path}.")
@@ -272,8 +282,13 @@ def build_excalidraw(data: dict[str, Any]) -> dict[str, Any]:
 def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None, refresh=False, roots=None) -> None:
     project_root = project_root.resolve(strict=True)
     content = json.loads(input_path.read_text(encoding="utf-8"))
-    principles = content["principles"]
-    for principle in principles.values():
+    principles = content.get("principles", {})
+    if not isinstance(principles, dict):
+        raise ValueError("Principles must be an object when provided.")
+    for id_, principle in principles.items():
+        if not isinstance(principle, dict):
+            raise ValueError(f"Principle {id_}: expected an object.")
+        validate_basis(principle, f"Principle {id_}")
         for path in principle["evidence"]:
             if not evidence_exists(path, project_root):
                 raise ValueError(f"Missing principle evidence {path}.")
@@ -292,8 +307,8 @@ def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None
             if group["phase"] != 1:
                 raise ValueError("All responsibility boundaries must be visible from reveal 1.")
         for phase in data["phases"]:
-            if not phase["principles"] or set(phase["principles"]) - principles.keys():
-                raise ValueError(f"Phase {phase['n']}: reference at least one known principle.")
+            if set(phase.get("principles", [])) - principles.keys():
+                raise ValueError(f"Phase {phase['n']}: reference only known principles.")
     insights = content.get("insights", {"items": []})
     for insight in insights["items"]:
         for view, phase in insight.get("availableFrom", {}).items():
