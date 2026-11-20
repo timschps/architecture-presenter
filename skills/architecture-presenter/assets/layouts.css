@@ -30,6 +30,12 @@ html[data-layout-preset="stage-ribbon"] .implementation-key { color: var(--cp-te
 @media (min-width: 901px) {
   .caption { height: var(--cp-caption-height); overflow: auto; }
   .principle-strip { height: var(--cp-explanation-height); overflow: auto; }
+  html[data-present="true"] .caption {
+    height: clamp(var(--cp-caption-height), 12vh, 260px);
+  }
+  html[data-present="true"] .principle-strip {
+    height: clamp(max(128px, var(--cp-explanation-height)), 17.5vh, 420px);
+  }
   html[data-details="true"] .workbench {
     grid-template-columns: minmax(0, 1fr) var(--cp-sidebar-width);
   }

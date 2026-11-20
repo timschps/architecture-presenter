@@ -46,7 +46,7 @@ const { pathToFileURL } = require('node:url');
   }
   const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : undefined });
   try {
-    const context = await browser.newContext({ offline: true });
+    const context = await browser.newContext({ offline: true, reducedMotion: 'reduce' });
     const page = await context.newPage();
     const errors = [], requests = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -68,7 +68,7 @@ const { pathToFileURL } = require('node:url');
         ({ layout, theme: 'midnight', appearance: 'dark' })) : []),
     ];
     for (const { layout, theme, appearance } of combinations) {
-    for (const [width, height] of [[1280, 720], [1920, 1080]]) {
+    for (const [width, height] of [[1280, 720], [1920, 1080], [3840, 2160]]) {
       await page.setViewportSize({ width, height });
       for (const view of views) {
         await page.goto(`${base}?view=${view}&phase=1&details=0&present=${layout === 'explore' ? 0 : 1}&layout=${layout}&theme=${theme}&appearance=${appearance}`);
@@ -81,6 +81,18 @@ const { pathToFileURL } = require('node:url');
           assert.deepEqual(await firstGeometry(), initial, `${view}/${phase}: stable screen coordinates at ${width}`);
           const issues = await page.evaluate(() => {
             const result = [];
+            if (document.documentElement.dataset.present === 'true') {
+              const caption = document.querySelector('.caption').getBoundingClientRect();
+              const title = document.querySelector('#phase-title').getBoundingClientRect();
+              const ribbon = document.querySelector('#principle-strip').getBoundingClientRect();
+              if (title.bottom > caption.bottom + 1 || title.right > caption.right + 1)
+                result.push('Reveal title overflows its reserved caption');
+              for (const item of document.querySelectorAll('#principle-strip > *')) {
+                const box = item.getBoundingClientRect();
+                if (box.bottom > ribbon.bottom + 1 || box.right > ribbon.right + 1)
+                  result.push('Ribbon content overflows its reserved area');
+              }
+            }
             for (const node of document.querySelectorAll('.node:not(.future):not(.gone)')) {
               const box = node.querySelector('rect').getBBox();
               for (const label of node.querySelectorAll('text')) {
@@ -94,6 +106,18 @@ const { pathToFileURL } = require('node:url');
             return result;
           });
           assert.deepEqual(issues, []);
+          if (layout !== 'explore') {
+          const sizes = await page.evaluate(() => ({
+            title: parseFloat(getComputedStyle(document.querySelector('#phase-title')).fontSize),
+            heading: parseFloat(getComputedStyle(document.querySelector('#principle-strip strong')).fontSize),
+            content: parseFloat(getComputedStyle(document.querySelector('#principle-strip .decision')).fontSize),
+            key: parseFloat(getComputedStyle(document.querySelector('#principle-strip .implementation-key')).fontSize),
+          }));
+          assert.ok(sizes.title >= height * 0.032, `${view}/${phase}: stage title size at ${width}`);
+          assert.ok(sizes.heading >= height * 0.023, `${view}/${phase}: stage ribbon heading size at ${width}`);
+          assert.ok(sizes.content >= height * 0.019, `${view}/${phase}: stage ribbon text size at ${width}`);
+          assert.ok(sizes.key >= height * 0.015, `${view}/${phase}: stage status key size at ${width}`);
+          }
           if (phase < count) await page.keyboard.press('PageDown');
         }
         await page.keyboard.press('PageDown');
@@ -187,7 +211,7 @@ const { pathToFileURL } = require('node:url');
     assert.match(await page.locator('#notice').innerText(), /Windowed stage mode still works/);
     assert.deepEqual(errors, []);
     assert.deepEqual(requests, []);
-    console.log(`PASS: declarative generation, arbitrary journeys, fixed overview, stable coordinates, manual zoom, focus, blackout, deep links, themes, responsive and offline. Screenshots: ${temp}`);
+    console.log(`PASS: declarative generation, 720p/1080p/4K stage typography, fixed overview, stable coordinates, manual zoom, focus, blackout, deep links, themes, responsive and offline. Screenshots: ${temp}`);
   } finally {
     await browser.close();
   }

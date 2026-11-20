@@ -335,9 +335,12 @@ Stage, or Stage Ribbon's ID. Options:
 Explore selections require an Explore preset. Stage selections require a
 Stage or Stage Ribbon preset. Layouts do not change the fixed SVG viewBox,
 node positions, reveal order, or implementation-state labels. Caption and
-explanation height are reserved on landscape viewports; long text scrolls
-within that space instead of shrinking the map. Narrow viewports use responsive
-rules. New content/designs still require screenshot and contrast verification.
+explanation height are reserved on landscape viewports. In stage layouts these
+options are minimum reservations, with viewport-scaled space for projector
+typography through 4K. Keep stage copy within those spaces, verified for every
+reveal; do not shrink typography to fit. Exploration can scroll long text
+without changing map geometry. Narrow viewports use responsive rules.
+New content/designs still require screenshot and contrast verification.
 
 ## Locks, sharing, and rebuilding
 

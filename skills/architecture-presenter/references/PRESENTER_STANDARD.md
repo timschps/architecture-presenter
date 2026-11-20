@@ -7,6 +7,9 @@ camera and stable screen coordinates. Reveal components and connectors in place,
 highlighting the addition rather than flying the camera. Manual inspection may
 zoom; the next/previous reveal returns to overview. Keep the ribbon height stable
 at landscape/projector sizes. Never let a longer caption rescale the diagram.
+Scale stage titles, ribbon text and status keys with viewport height. Keep
+stage copy concise enough to fit the reserved spaces at every reveal; revise
+the wording rather than shrinking text or hiding overflow.
 
 ## Tangibility and truth
 
@@ -49,6 +52,8 @@ Next: Right/PageDown/Space. Previous: Left/PageUp. Ignore held-key repeats and
 editable controls. M: journeys, C: context, F: fullscreen, B: blackout,
 0: overview, +/-: zoom. Provide calibration and explicit start/end notices.
 
-Verify every journey at projector sizes with identical screen coordinates and
-scale across reveals, plus responsive overflow, supported appearances, focus and
-offline operation. Hardware rehearsal is separate from simulated key checks.
+Verify every journey at 1280x720, 1920x1080 and 3840x2160 with identical
+screen coordinates and scale across reveals, readable stage typography and no
+caption or ribbon overflow, plus narrow viewports, supported appearances, focus
+and offline operation. Actual display size, viewing distance and clicker
+hardware require a separate in-room rehearsal.
