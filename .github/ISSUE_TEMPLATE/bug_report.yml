@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible presenter or generation problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use synthetic, sanitized examples. Never include credentials, private themes,
+        decks or session data. Report vulnerabilities privately via SECURITY.md.
+  - type: input
+    id: environment
+    attributes:
+      label: Version and environment
+      description: Plugin version, OS, Python/Node versions and browser.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Commands/steps and a synthetic story or design snippet.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include sanitized errors; for visuals, include viewport and theme/layout.
+    validations:
+      required: true
