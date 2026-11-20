@@ -65,7 +65,7 @@ button:disabled { opacity: .4; cursor: default; }
 .toolbar { min-height: 60px; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid var(--cp-border); }
 .identity { font-size: 15px; font-weight: 600; white-space: nowrap; }
 .identity span { font-weight: 400; color: var(--cp-text-muted); margin-left: 12px; }
-.tabs { display: flex; align-self: stretch; gap: 20px; margin-left: 24px; }
+.tabs { display: flex; flex-wrap: wrap; min-width: 0; align-self: stretch; gap: 20px; margin-left: 24px; }
 .tab { border: 0; border-radius: 0; padding: 12px 0; background: none; border-bottom: 3px solid transparent; color: var(--cp-text-muted); }
 .tab[aria-selected="true"] { border-color: var(--cp-accent); color: var(--cp-text); font-weight: 600; }
 .tools { display: flex; gap: 8px; margin-left: auto; }
@@ -307,6 +307,8 @@ let selected = null;
 let camera = {x: 0, y: 0, width: 1490, height: 700};
 let drag = null;
 let dragged = false;
+let traceFrame = null;
+let traceState = null;
 let nextKey = params.get("nextKey") || "";
 let previousKey = params.get("previousKey") || "";
 const canvas = document.getElementById("canvas");
@@ -328,6 +330,8 @@ const basisLabel = basis => ({
   proposed: "Suggested lens, not an approved principle",
 })[basis] || "Basis not recorded";
 const statusKey = '<span>APP: application implementation</span><span>SOURCE: implemented contract</span><span>FOUNDATION: recorded infrastructure</span><span>EXTERNAL: external responsibility</span><span>TARGET + dashed: not commissioned</span>';
+const conceptualKey = '<span>Dashed: hypothetical alternatives.</span><span>Dot: one illustrative path.</span><span>Instructions guide / permissions block / checks verify / humans decide.</span>';
+const conceptualNotice = 'Conceptual illustration, not a recorded session or measured productivity.';
 
 function syncUrl() {
   const url = new URL(location.href);
@@ -347,7 +351,11 @@ function notify(message) {
   notice.hidden = !message;
 }
 function renderEvidence(phase) {
-  const base = `https://github.com/${DATA.repository}`;
+  const conceptual = DATA.kind === "conceptual";
+  const base = DATA.repository ? `https://github.com/${DATA.repository}` : "";
+  const sourceLink = path => base
+    ? `<a href="${base}/${/\.[a-z0-9]+$/i.test(path) ? "blob" : "tree"}/${DATA.revision}/${esc(path)}" target="_blank" rel="noopener noreferrer"><code>${esc(path)}</code></a>`
+    : `<code>${esc(path)}</code> (local)`;
   const item = selected ? itemFor(selected) : null;
   const origin = item ? DATA.phases[item.phase - 1] : phase;
   const added = DATA.components.filter(node => node.phase === current);
@@ -359,12 +367,13 @@ function renderEvidence(phase) {
     <h3>${esc(insight.title)}</h3><p>${esc(insight.lesson)}</p>
     <h3>Suggested voice-over</h3><blockquote class="voiceover">${esc(insight.voiceover)}</blockquote>
     <details><summary>Source references</summary><ul>${insight.sources.map(source => `<li>${source.kind === "commit"
-      ? `<a href="${base}/commit/${esc(source.hash)}" target="_blank" rel="noopener noreferrer">${esc(source.label)} (${esc(source.hash)})</a>`
+      ? (base ? `<a href="${base}/commit/${esc(source.hash)}" target="_blank" rel="noopener noreferrer">${esc(source.label)} (${esc(source.hash)})</a>`
+        : `${esc(source.label)} (<code>${esc(source.hash)}</code>)`)
       : source.kind === "tool"
         ? `${esc(source.label)}<p class="source-note"><code>${esc(source.tool)}</code><br>${esc(source.timestamp)}. Recorded completion: successful.</p><p class="source-note">Query: ${esc(source.query)}</p><p class="source-note">Original session <code>${esc(source.session_id)}</code><br>Call <code>${esc(source.call_id)}</code></p>`
         : `${esc(source.label)}<p class="source-note">Original session <code>${esc(source.session_id)}</code>, ${source.kind === "checkpoint" ? `checkpoint ${esc(source.checkpoint)}` : `turn ${esc(source.turn)}`}.</p><p class="source-note">${esc(source.excerpt)}</p>`}</li>`).join("")}</ul></details>
     <p class="source-note">Voice-over is a suggested paraphrase, not a quotation. Historical decisions are not claims of currently open defects.</p></section>`).join("");
-  document.getElementById("context-kind").textContent = item ? (item.from ? "Flow focus" : item.name ? "Component focus" : "Boundary focus") : "Reveal context";
+  document.getElementById("context-kind").textContent = conceptual ? "Illustration context" : item ? (item.from ? "Flow focus" : item.name ? "Component focus" : "Boundary focus") : "Reveal context";
   document.getElementById("context-title").textContent = item ? item.name || item.label || item.title || item.id : phase.title;
   const principleNotes = (origin.principles || []).map(id => {
     const p = PRINCIPLES[id];
@@ -373,30 +382,64 @@ function renderEvidence(phase) {
       <p><b>Quality attributes:</b> ${esc(p.attributes)}</p>
       <p><b>Requirement:</b> ${esc(p.requirement)}</p><p><b>Decision:</b> ${esc(p.decision)}</p>
       <p><b>Trade-off:</b> ${esc(p.tradeoff)}</p><p><b>Verification:</b> ${esc(p.verification)}</p>
-      <p><b>Evidence limit:</b> ${esc(p.scope)}</p><ul>${p.evidence.map(path => `<li><a href="${base}/${/\.[a-z0-9]+$/i.test(path) ? "blob" : "tree"}/${DATA.revision}/${esc(path)}" target="_blank" rel="noopener noreferrer"><code>${esc(path)}</code></a></li>`).join("")}</ul></section>`;
+      <p><b>Evidence limit:</b> ${esc(p.scope)}</p><ul>${p.evidence.map(path => `<li>${sourceLink(path)}</li>`).join("")}</ul></section>`;
   }).join("");
-  const sourceLink = path => `<a href="${base}/${/\.[a-z0-9]+$/i.test(path) ? "blob" : "tree"}/${DATA.revision}/${esc(path)}" target="_blank" rel="noopener noreferrer"><code>${esc(path)}</code></a>`;
   const itemEvidence = item?.evidence?.length ? `<h3>Component evidence</h3><ul>${item.evidence.map(path => `<li>${sourceLink(path)}</li>`).join("")}</ul>` : "";
   panel.innerHTML = `${item ? `<button type="button" class="inspect-link" data-overview>Back to reveal context</button>
-    ${item.state ? `<p><b>Implementation state:</b> ${esc(item.state)}. ${item.state === "TARGET" ? "Proposed or uncommissioned capability, not verified live." : item.state === "FOUNDATION" ? "Recorded infrastructure, not proof of workload or data-plane execution." : item.state === "SOURCE" ? "Implemented source contract or handler, not evidence that the full end-to-end path is enabled." : item.state === "EXTERNAL" ? "External responsibility, not a service implemented by this project." : "Application implementation; deployment claims require separate dated evidence."}</p>` : ""}
+    ${item.state === "ILLUSTRATIVE" ? `<p><b>Illustrative element:</b> a conceptual example, not a deployed component or recorded action.</p>` : item.state ? `<p><b>Implementation state:</b> ${esc(item.state)}. ${item.state === "TARGET" ? "Proposed or uncommissioned capability, not verified live." : item.state === "FOUNDATION" ? "Recorded infrastructure, not proof of workload or data-plane execution." : item.state === "SOURCE" ? "Implemented source contract or handler, not evidence that the full end-to-end path is enabled." : item.state === "EXTERNAL" ? "External responsibility, not a service implemented by this project." : "Application implementation; deployment claims require separate dated evidence."}</p>` : ""}
     <p>${esc(item.detail || (item.lines || []).join(". "))}</p>
     ${itemEvidence}
     <p class="hint">Introduced in ${esc(DATA.stepLabel.toLowerCase())} ${item.phase}: ${esc(origin.title)}.</p>
     ${item.from ? `<p>${inspectLink(itemFor(item.from))} &rarr; ${inspectLink(itemFor(item.to))}</p>` : ""}` : `<p class="hint">${esc(phase.status || phase.dates)}</p><h3>What changed</h3><p>${esc(phase.summary)}</p>`}
     ${principleNotes}
     ${learningNotes}
-    ${(origin.decisions || []).length || origin.value || origin.tradeoff ? `<h3>${item ? "Decision context in its introduction reveal" : "Decision context"}</h3>
+    ${(origin.decisions || []).length || origin.value || origin.tradeoff ? `<h3>${conceptual ? "Illustration context" : item ? "Decision context in its introduction reveal" : "Decision context"}</h3>
       <p class="source-note">${esc(basisLabel(origin.basis))}</p>
       ${origin.value ? `<p><b>Value:</b> ${esc(origin.value)}</p>` : ""}
       ${(origin.decisions || []).length ? `<ul>${origin.decisions.map(text => `<li>${esc(text)}</li>`).join("")}</ul>` : ""}
       ${origin.tradeoff ? `<p><b>Trade-off:</b> ${esc(origin.tradeoff)}</p>` : ""}` : ""}
     ${!item ? `<h3>Introduced in this reveal</h3>${added.length ? `<ul>${added.map(node => `<li>${inspectLink(node)}</li>`).join("")}</ul>` : "<p>Existing components and boundaries change.</p>"}` : ""}
-    <h3>Repository evidence for this reveal</h3><div class="sources">${origin.commits.map(hash => `<a href="${base}/commit/${esc(hash)}" target="_blank" rel="noopener noreferrer"><code>${esc(hash)}</code></a>`).join("")}
+    ${!conceptual || origin.evidence.length || origin.commits.length || (origin.issues || []).length ? `<h3>${conceptual ? "Supporting references" : "Repository evidence for this reveal"}</h3><div class="sources">${origin.commits.map(hash => `<a href="${base}/commit/${esc(hash)}" target="_blank" rel="noopener noreferrer"><code>${esc(hash)}</code></a>`).join("")}
     ${(origin.issues || []).map(n => `<a href="${base}/issues/${n}" target="_blank" rel="noopener noreferrer">Issue #${n}</a>`).join("")}</div>
-    <ul>${origin.evidence.map(path => `<li>${origin.status ? `<code>${esc(path)}</code> (local)` : sourceLink(path)}</li>`).join("")}</ul>
-    ${(origin.references || []).length ? `<h3>Microsoft Learn references</h3><ul>${origin.references.map(reference => `<li><a href="${esc(reference.url)}" target="_blank" rel="noopener noreferrer">${esc(reference.title)}</a></li>`).join("")}</ul>` : ""}
-    <h3>Active connections</h3><ul>${flows.map(flow => `<li>${inspectLink(flow)}: ${esc(flow.detail)}</li>`).join("")}</ul>
-    <h3>Scope</h3><p>${esc(DATA.scope)}</p><p class="hint">Baseline ${esc(DATA.revision)}. Snapshot ${esc(DATA.snapshot)}. This is not a live infrastructure inventory or pipeline run. Quality targets are not measured SLOs; this is not a completed WAF assessment.</p>`;
+    <ul>${origin.evidence.map(path => `<li>${origin.status ? `<code>${esc(path)}</code> (local)` : sourceLink(path)}</li>`).join("")}</ul>` : ""}
+    ${(origin.references || []).length ? `<h3>${conceptual ? "References" : "Microsoft Learn references"}</h3><ul>${origin.references.map(reference => `<li><a href="${esc(reference.url)}" target="_blank" rel="noopener noreferrer">${esc(reference.title)}</a></li>`).join("")}</ul>` : ""}
+    <h3>${conceptual ? "Illustrative paths" : "Active connections"}</h3><ul>${flows.map(flow => `<li>${inspectLink(flow)}: ${esc(flow.detail)}</li>`).join("")}</ul>
+    <h3>Scope</h3><p>${esc(DATA.scope)}</p><p class="hint">${conceptual ? `${conceptualNotice} Possible paths are not simultaneous executions, equally likely outcomes, or a guarantee of the shortest route.` : `Baseline ${esc(DATA.revision)}. Snapshot ${esc(DATA.snapshot)}. This is not a live infrastructure inventory or pipeline run. Quality targets are not measured SLOs; this is not a completed WAF assessment.`}</p>`;
+}
+function renderTrace(phase) {
+  const cursor = canvas.querySelector("#trace-cursor");
+  if (!cursor) return;
+  const key = `${view}:${phase.n}`;
+  if (traceState?.key === key) return;
+  cancelAnimationFrame(traceFrame);
+  const previous = traceState;
+  if (!phase.trace) {
+    cursor.setAttribute("hidden", "");
+    traceState = {key, flow: null, progress: 0};
+    return;
+  }
+  cursor.removeAttribute("hidden");
+  const {flow, progress} = phase.trace;
+  const path = elementFor(flow).querySelector("path:not(.edge-hit)");
+  const length = path.getTotalLength();
+  path.removeAttribute("marker-end");
+  path.style.strokeDasharray = length;
+  const start = previous?.flow === flow ? previous.progress : 0;
+  traceState = {key, flow, progress: start};
+  cursor.dataset.flow = flow;
+  const begun = performance.now();
+  function frame(time) {
+    const ratio = !previous || matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : Math.min(1, (time - begun) / 650);
+    traceState.progress = ratio === 1 ? progress : start + (progress - start) * ratio;
+    path.style.strokeDashoffset = length * (1 - traceState.progress);
+    const point = path.getPointAtLength(length * traceState.progress);
+    cursor.setAttribute("cx", point.x);
+    cursor.setAttribute("cy", point.y);
+    cursor.dataset.progress = traceState.progress;
+    cursor.dataset.animating = String(ratio < 1);
+    if (ratio < 1) traceFrame = requestAnimationFrame(frame);
+  }
+  frame(begun);
 }
 function setDetails(enabled) {
   root.dataset.details = String(enabled);
@@ -473,6 +516,8 @@ function showJourneys() {
 }
 function render() {
   const phase = DATA.phases[current - 1];
+  const conceptual = DATA.kind === "conceptual";
+  root.dataset.journeyKind = conceptual ? "conceptual" : "architecture";
   slider.max = DATA.phases.length;
   slider.value = current;
   slider.setAttribute("aria-valuetext", `${DATA.stepLabel} ${current}: ${phase.title}`);
@@ -488,8 +533,9 @@ function render() {
     const end = element.dataset.until ? Number(element.dataset.until) : DATA.phases.length;
     element.classList.toggle("future", start > current);
     element.classList.toggle("gone", current > end);
-    element.classList.toggle("new", start === current);
-    element.classList.toggle("current", start === current);
+    const highlighted = conceptual ? (phase.emphasis || []).includes(element.id) : start === current;
+    element.classList.toggle("new", highlighted);
+    element.classList.toggle("current", highlighted);
     element.setAttribute("aria-hidden", start > current || current > end ? "true" : "false");
     element.tabIndex = start > current || current > end ? -1 : 0;
     element.setAttribute("aria-pressed", "false");
@@ -512,22 +558,25 @@ function render() {
     ? `${esc(principle.requirement)} &rarr; ${esc(principle.decision)}` : esc((phase.decisions || [])[0] || "");
   const tradeoff = phase.tradeoff || principle?.tradeoff;
   strip.innerHTML = activeCommentary ? `<button type="button" id="principle-context" aria-controls="inspector">
-      <strong>${principle ? `${esc(principleId)} / ${esc(principle.name)}` : "Decision context"}</strong>
+      <strong>${principle ? `${esc(principleId)} / ${esc(principle.name)}` : conceptual ? "Illustration context" : "Decision context"}</strong>
       <span class="basis-label">${esc(basisLabel(phase.basis || principle?.basis))}</span></button>
     ${decision ? `<p class="decision">${decision}</p>` : ""}
     ${tradeoff ? `<p class="tradeoff map-tradeoff"><b>Trade-off:</b> ${esc(tradeoff)}</p>` : ""}
-    ${hasStates ? `<div class="implementation-key" aria-label="Implementation status key">${statusKey}</div>` : ""}` : "";
+    ${hasStates ? `<div class="implementation-key" aria-label="${conceptual ? "Illustration key" : "Implementation status key"}">${conceptual ? conceptualKey : statusKey}</div>` : ""}` : "";
   document.getElementById("principle-context")?.addEventListener("click", () => { overview(); setDetails(true); });
   const footerKey = document.getElementById("status-key");
-  footerKey.hidden = journeyHasCommentary || !hasStates;
-  footerKey.innerHTML = footerKey.hidden ? "" : statusKey;
+  footerKey.hidden = !conceptual && (journeyHasCommentary || !hasStates);
+  footerKey.setAttribute("aria-label", conceptual ? "Conceptual illustration notice" : "Implementation status key");
+  footerKey.innerHTML = conceptual ? conceptualNotice : footerKey.hidden ? "" : statusKey;
   const stamp = document.getElementById("stamp");
-  stamp.textContent = `${phase.status || "Repository-grounded"} | ${phase.dates}`;
+  stamp.textContent = conceptual ? conceptualNotice : `${phase.status || "Repository-grounded"} | ${phase.dates}`;
   stamp.classList.toggle("local", Boolean(phase.status));
   document.getElementById("position").textContent = `${current} / ${DATA.phases.length}`;
   document.getElementById("sequence").textContent = `${DATA.stepLabel} ${current} / ${DATA.phases.length}`;
+  document.querySelector(".legend").innerHTML = conceptual ? "<b>Highlighted:</b> current focus / Dashed: hypothetical alternatives" : "<b>Highlighted:</b> introduced now &nbsp; / &nbsp; Faint: introduced later";
   document.getElementById("prev").disabled = current === 1;
   document.getElementById("next").disabled = current === DATA.phases.length;
+  renderTrace(phase);
   overview();
   syncUrl();
 }
@@ -536,6 +585,8 @@ function go(value) {
   render();
 }
 function setView(name, phase = 1) {
+  cancelAnimationFrame(traceFrame);
+  traceState = null;
   view = name;
   DATA = VIEWS[view];
   canvas.innerHTML = DIAGRAMS[view];

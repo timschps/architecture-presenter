@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "architecture-presenter",
-  "version": "1.2.0",
-  "description": "Evidence-backed offline architecture presenters with fixed-overview reveals, modular layouts, and scoped local themes.",
+  "version": "1.3.0",
+  "description": "Offline architecture presenters with source evidence, optional conceptual branching journeys, modular layouts, and scoped local themes.",
   "repository": "https://github.com/timschps/architecture-presenter",
   "keywords": ["architecture", "presenter", "diagrams", "skills"]
 }

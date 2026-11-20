@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass, field
 from html import escape
 import json
+import math
 from pathlib import Path
 import re
 import textwrap
@@ -56,6 +57,10 @@ svg { font-family: var(--cp-font); }
 .selected.edge path:not(.edge-hit), .edge:focus path:not(.edge-hit) { stroke: var(--cp-accent); stroke-width: 3; }
 .selected.group .group-box, .group:focus .group-box { stroke: var(--cp-accent); stroke-width: 3; }
 .edge path.edge-hit { stroke-width: 18; stroke-opacity: 0; pointer-events: stroke; }
+.edge[data-alternative="true"]:not(.future):not(.gone) { opacity: .4; }
+.edge[data-alternative="true"]:is(:focus, .selected) { opacity: 1; }
+.edge[data-alternative="true"] path:not(.edge-hit) { stroke-dasharray: 7 6; }
+.trace-cursor { fill: var(--cp-accent); stroke: var(--cp-accent-fg); stroke-width: 3; pointer-events: none; }
 .future, .future path.edge-hit { pointer-events: none; }
 [data-phase] { transition: opacity .35s ease; }
 @media (prefers-reduced-motion: reduce) { [data-phase] { transition: none; } }
@@ -87,6 +92,9 @@ def validate_basis(item: dict[str, Any], context: str) -> None:
 
 
 def validate_data(data: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    conceptual = data.get("kind", "architecture") == "conceptual"
+    if data.get("kind", "architecture") not in ("architecture", "conceptual"):
+        raise ValueError("Journey kind must be architecture or conceptual.")
     count = len(data["phases"])
     if not count or [p["n"] for p in data["phases"]] != list(range(1, count + 1)):
         raise ValueError("Phase numbers must be consecutive, starting at 1.")
@@ -101,6 +109,8 @@ def validate_data(data: dict[str, Any], project_root: Path) -> dict[str, Any]:
                 raise ValueError(f"Phase {phase['n']}: missing repository evidence {path}.")
     components = {item["id"]: item for item in data["components"]}
     if any(not item.get("state") for item in data["components"]):
+        if conceptual:
+            raise ValueError("Every conceptual node needs state ILLUSTRATIVE.")
         raise ValueError("Every component needs an explicit implementation state.")
     elements = data["groups"] + data["components"] + data["flows"]
     ids = [item["id"] for item in elements]
@@ -111,8 +121,13 @@ def validate_data(data: dict[str, Any], project_root: Path) -> dict[str, Any]:
             raise ValueError(f"Invalid element ID: {item['id']}.")
         if not 1 <= item["phase"] <= count:
             raise ValueError(f"{item['id']}: phase is outside the timeline.")
-        if item.get("state", "") not in ("", "APP", "SOURCE", "FOUNDATION", "EXTERNAL", "TARGET"):
+        states = ("", "ILLUSTRATIVE") if conceptual else ("", "APP", "SOURCE", "FOUNDATION", "EXTERNAL", "TARGET")
+        if item.get("state", "") not in states:
+            if conceptual:
+                raise ValueError(f"{item['id']}: conceptual elements use ILLUSTRATIVE, not implementation states.")
             raise ValueError(f"{item['id']}: unknown implementation state.")
+        if "alternative" in item and (not conceptual or not isinstance(item["alternative"], bool) or item not in data["flows"]):
+            raise ValueError(f"{item['id']}: alternative is a boolean for conceptual flows only.")
         for path in item.get("evidence", []):
             if not evidence_exists(path, project_root):
                 raise ValueError(f"{item['id']}: missing repository evidence {path}.")
@@ -126,6 +141,28 @@ def validate_data(data: dict[str, Any], project_root: Path) -> dict[str, Any]:
                 raise ValueError(f"{flow['id']}: flow predates its endpoint.")
         if "until" in flow and not flow["phase"] <= flow["until"] <= count:
             raise ValueError(f"{flow['id']}: invalid end phase.")
+    elements_by_id = {item["id"]: item for item in elements}
+    flows_by_id = {item["id"]: item for item in data["flows"]}
+    for phase in data["phases"]:
+        if any(key in phase for key in ("emphasis", "trace")) and not conceptual:
+            raise ValueError("Emphasis and trace are for conceptual journeys only.")
+        emphasis = phase.get("emphasis", [])
+        if not isinstance(emphasis, list) or any(not isinstance(id_, str) for id_ in emphasis):
+            raise ValueError(f"Phase {phase['n']}: emphasis must be an array of element IDs.")
+        for id_ in emphasis:
+            item = elements_by_id.get(id_)
+            if not item or not item["phase"] <= phase["n"] <= item.get("until", count):
+                raise ValueError(f"Phase {phase['n']}: emphasis must reference active elements.")
+        if "trace" in phase:
+            trace = phase["trace"]
+            if not isinstance(trace, dict) or set(trace) != {"flow", "progress"} or not isinstance(trace["flow"], str):
+                raise ValueError(f"Phase {phase['n']}: trace needs a flow ID and progress.")
+            flow = flows_by_id.get(trace["flow"])
+            progress = trace["progress"]
+            if not flow or flow.get("alternative") or not flow["phase"] <= phase["n"] <= flow.get("until", count):
+                raise ValueError(f"Phase {phase['n']}: trace must reference an active illustrative flow, not an alternative.")
+            if isinstance(progress, bool) or not isinstance(progress, (int, float)) or not 0 <= progress <= 1:
+                raise ValueError(f"Phase {phase['n']}: trace progress must be between 0 and 1.")
     return data
 
 
@@ -137,6 +174,8 @@ def attributes(item: dict[str, Any]) -> str:
         result += f' data-state="{escape(item["state"], quote=True)}"'
     if item.get("plane"):
         result += f' data-plane="{escape(item["plane"], quote=True)}"'
+    if item.get("alternative"):
+        result += ' data-alternative="true"'
     return result
 
 
@@ -148,9 +187,14 @@ def interactive(item: dict[str, Any], label: str) -> str:
 
 
 def build_svg(data: dict[str, Any]) -> str:
+    conceptual = data.get("kind") == "conceptual"
+    final = data["phases"][-1]
+    emphasis = final.get("emphasis", []) if conceptual else []
+    # Static exports retain the last authored progress of each illustrative path.
+    traces = {phase["trace"]["flow"]: phase["trace"]["progress"] for phase in data["phases"] if "trace" in phase}
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" id="diagram" '
-        'viewBox="0 0 1490 700" role="group" aria-labelledby="diagram-title diagram-desc">',
+        f'viewBox="0 0 1490 700" data-kind="{data.get("kind", "architecture")}" role="group" aria-labelledby="diagram-title diagram-desc">',
         f'<title id="diagram-title">{escape(data["title"])}</title>',
         f'<desc id="diagram-desc">{escape(data["description"])}</desc>',
         f"<style>{SVG_STYLE}</style>",
@@ -178,12 +222,20 @@ def build_svg(data: dict[str, Any]) -> str:
         )
     for flow in data["flows"]:
         # A standalone SVG represents the final phase, not obsolete public flows.
-        css = "edge gone" if "until" in flow else "edge"
+        css = "edge gone" if flow.get("until", len(data["phases"])) < len(data["phases"]) else "edge"
+        if flow["id"] in emphasis:
+            css += " new current"
+        if flow["id"] in traces:
+            points = route_points(flow["path"])
+            length = sum(math.dist(a, b) for a, b in zip(points, points[1:]))
+            ending = f'stroke-dasharray="{length}" stroke-dashoffset="{length * (1 - traces[flow["id"]])}"'
+        else:
+            ending = f'marker-end="url(#arrow{("-" + flow["plane"]) if flow.get("plane") else ""})"'
         parts.append(
             f'<g {interactive(flow, flow.get("label", flow["id"]))} class="{css}">'
             f'<title>{escape(flow["detail"])}</title>'
             f'<path class="edge-hit" d="{escape(flow["path"], quote=True)}"/>'
-            f'<path d="{escape(flow["path"], quote=True)}" marker-end="url(#arrow{("-" + flow["plane"]) if flow.get("plane") else ""})"/>'
+            f'<path d="{escape(flow["path"], quote=True)}" {ending}/>'
         )
         if flow.get("label"):
             parts.append(
@@ -194,7 +246,7 @@ def build_svg(data: dict[str, Any]) -> str:
     for item in data["components"]:
         node = Node(**item)
         parts.append(
-            f'<g {interactive(item, node.name + (" / " + node.state if node.state else ""))} class="node">'
+            f'<g {interactive(item, node.name + (" / " + node.state if node.state else ""))} class="node{" new current" if node.id in emphasis else ""}">'
             f'<rect class="node-box" x="{node.x}" y="{node.y}" '
             f'width="{node.width}" height="{HEIGHT}" rx="4"/>'
             f'<text class="node-title" x="{node.x + 14}" y="{node.y + (33 if node.state else 25)}">'
@@ -219,8 +271,41 @@ def build_svg(data: dict[str, Any]) -> str:
             parts.append(f'<tspan x="{node.x + 14}" dy="{0 if index == 0 else 25}">{escape(line)}</tspan>')
         parts.append("</text>")
         parts.append("</g>")
+    if conceptual:
+        trace = final.get("trace")
+        if trace:
+            flow = next(flow for flow in data["flows"] if flow["id"] == trace["flow"])
+            x, y = point_on_route(flow["path"], trace["progress"])
+        else:
+            x, y = 0, 0
+        parts.append(
+            f'<circle id="trace-cursor" class="trace-cursor" cx="{x}" cy="{y}" r="8" '
+            f'aria-label="Illustrative progress, not recorded execution" role="img"{" hidden" if not trace else ""}/>'
+        )
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+def route_points(path: str) -> list[tuple[int, int]]:
+    commands = re.findall(r"([MHV])([\d ]+)", path)
+    x, y = map(int, commands[0][1].split())
+    points = [(x, y)]
+    for command, value in commands[1:]:
+        x, y = (int(value), y) if command == "H" else (x, int(value))
+        points.append((x, y))
+    return points
+
+
+def point_on_route(path: str, progress: float) -> tuple[float, float]:
+    points = route_points(path)
+    lengths = [math.dist(a, b) for a, b in zip(points, points[1:])]
+    remaining = sum(lengths) * progress
+    for a, b, length in zip(points, points[1:], lengths):
+        if length and remaining <= length:
+            ratio = remaining / length
+            return a[0] + (b[0] - a[0]) * ratio, a[1] + (b[1] - a[1]) * ratio
+        remaining -= length
+    return points[-1]
 
 
 def build_excalidraw(data: dict[str, Any]) -> dict[str, Any]:
@@ -253,7 +338,7 @@ def build_excalidraw(data: dict[str, Any]) -> dict[str, Any]:
             "groupIds": [item["id"] + "-group"],
         })
     for flow in data["flows"]:
-        if "until" in flow:
+        if flow.get("until", len(data["phases"])) < len(data["phases"]):
             continue
         # Paths use only horizontal and vertical segments.
         commands = re.findall(r"([MHV])([\d ]+)", flow["path"])
@@ -271,7 +356,7 @@ def build_excalidraw(data: dict[str, Any]) -> dict[str, Any]:
             "height": max(p[1] for p in points) - min(p[1] for p in points),
             "points": points, "strokeColor": "#5c5c5c", "strokeWidth": 1,
             "roughness": 0, "endArrowhead": "arrow",
-            "strokeStyle": "dashed" if flow.get("state") == "TARGET" else "solid",
+            "strokeStyle": "dashed" if flow.get("state") == "TARGET" or flow.get("alternative") else "solid",
         })
     return {
         "type": "excalidraw", "version": 2, "source": "architecture-presenter",
@@ -299,10 +384,13 @@ def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"Invalid journey ID: {name}.")
         validate_data(data, project_root)
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", data["repository"]):
+        conceptual = data.get("kind") == "conceptual"
+        if (not conceptual or "repository" in data or "revision" in data) and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", data.get("repository", "")):
             raise ValueError("Repository must be owner/name, not an arbitrary URL.")
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+", data["revision"]):
+        if (not conceptual or "repository" in data or "revision" in data) and not re.fullmatch(r"[A-Za-z0-9_.-]+", data.get("revision", "")):
             raise ValueError("Use a source commit or simple ref without URL delimiters.")
+        if conceptual and not data.get("repository") and any(phase.get("commits") or phase.get("issues") for phase in data["phases"]):
+            raise ValueError("Commit and issue references need repository and revision metadata.")
         for group in data["groups"]:
             if group["phase"] != 1:
                 raise ValueError("All responsibility boundaries must be visible from reveal 1.")

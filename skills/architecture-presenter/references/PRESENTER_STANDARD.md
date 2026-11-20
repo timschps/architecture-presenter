@@ -36,6 +36,14 @@ Mixed journeys keep a stable reserved slot, invisible and unfocusable on
 reveals without commentary. Keep implementation-state labels and source
 inspection available regardless of rationale coverage.
 
+Conceptual journeys are explicitly optional, not evidence of real execution.
+Use ILLUSTRATIVE node labels and a persistent conceptual notice, not APP,
+FOUNDATION or TARGET deployment labels. Dashed alternatives represent
+possibilities; one dot shows an illustrative path. Animation may move or
+rewind the dot but must not zoom or rescale the map. Respect reduced motion.
+Instructions guide, permissions can block, checks verify and humans decide;
+do not imply guaranteed correctness or measured time savings.
+
 ## Visuals
 
 Microsoft Fluent is the default theme in exploration and presentation.

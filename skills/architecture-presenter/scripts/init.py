@@ -5,12 +5,16 @@ import json
 from pathlib import Path
 import shutil
 from starter import create_story
+from branching import create_branching_story
 from design_config import (
     add_design_arguments, argument_overrides, resolve_design, write_json,
 )
 
 
-def initialize(project_root, folder="architecture", name="Project architecture", overrides=None, roots=None):
+def initialize(project_root, folder="architecture", name=None, overrides=None, roots=None, example="architecture"):
+    if example not in ("architecture", "branching"):
+        raise ValueError("Example must be architecture or branching.")
+    name = name or ("Agent branching" if example == "branching" else "Project architecture")
     project = Path(project_root).resolve(strict=True)
     target = project / folder
     if not target.resolve().is_relative_to(project) or target.resolve() == project:
@@ -33,8 +37,10 @@ def initialize(project_root, folder="architecture", name="Project architecture",
     lock["inputs"]["presenter.json"] = digest(settings)
     lock["hash"] = digest({k: v for k, v in lock.items() if k != "hash"})
     write_json(target / "design.lock.json", lock)
-    (target / "story.json").write_text(json.dumps(create_story(name), indent=2) + "\n", encoding="utf-8")
-    print(f"Created {target}. Replace synthetic starter content before delivery.")
+    story = create_branching_story(name) if example == "branching" else create_story(name)
+    (target / "story.json").write_text(json.dumps(story, indent=2) + "\n", encoding="utf-8")
+    note = "Conceptual example, not a recorded session." if example == "branching" else "Replace synthetic starter content before delivery."
+    print(f"Created {target}. {note}")
     return target
 
 
@@ -42,10 +48,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--folder", default="architecture")
-    parser.add_argument("--name", default="Project architecture")
+    parser.add_argument("--name")
+    parser.add_argument("--example", choices=("architecture", "branching"), default="architecture")
     add_design_arguments(parser)
     args = parser.parse_args()
     try:
-        initialize(args.project_root, args.folder, args.name, argument_overrides(args))
+        initialize(args.project_root, args.folder, args.name, argument_overrides(args), example=args.example)
     except (ValueError, OSError) as error:
         parser.exit(2, f"{error}\n")

@@ -25,6 +25,9 @@ const { pathToFileURL } = require('node:url');
     const storyPath = path.join(project, 'architecture', 'story.json');
     const story = JSON.parse(fs.readFileSync(storyPath, 'utf8'));
     story.views = { system: story.views.architecture, principles: story.views.principles };
+    run([path.join(root, 'skills', 'architecture-presenter', 'scripts', 'init.py'),
+      '--project-root', project, '--folder', 'branching', '--example', 'branching']);
+    const branching = JSON.parse(fs.readFileSync(path.join(project, 'branching', 'story.json'), 'utf8'));
     story.views.system.phases[1].title = 'A deliberately longer title that wraps while the architecture remains in exactly the same position';
     const plain = JSON.parse(JSON.stringify(story.views.system));
     plain.label = 'Architecture only';
@@ -52,6 +55,7 @@ const { pathToFileURL } = require('node:url');
     story.views.system.phases[0].evidence = ['evidence.txt'];
     delete story.principles.P2.basis;
     delete story.views.system.phases[1].basis;
+    for (const [id, journey] of Object.entries(branching.views)) story.views[`conceptual-${id}`] = journey;
     fs.writeFileSync(storyPath, JSON.stringify(story));
     run([path.join(project, 'architecture', 'build.py'), '--input', storyPath,
       '--project-root', project, '--output', path.join(project, 'architecture')]);
@@ -96,6 +100,7 @@ const { pathToFileURL } = require('node:url');
     await page.goto(base);
     await page.waitForFunction(() => document.getElementById('phase-title').textContent);
     const views = await page.locator('[data-journey]').evaluateAll(nodes => nodes.map(n => n.dataset.journey));
+    const stories = await page.evaluate(() => VIEWS);
     const catalog = await page.evaluate(() => window.presenterDesign.design);
     const hasLocal = Object.hasOwn(catalog.themes, 'midnight');
     const combinations = Object.entries(catalog.layouts).flatMap(([layout, definition]) =>
@@ -114,6 +119,37 @@ const { pathToFileURL } = require('node:url');
           assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'), '0 0 1490 700');
           assert.equal(await page.locator('.group.future').count(), 0);
           assert.deepEqual(await firstGeometry(), initial, `${view}/${phase}: stable screen coordinates at ${width}`);
+          if (stories[view].kind === 'conceptual') {
+            assert.equal(await page.locator('html').getAttribute('data-journey-kind'), 'conceptual');
+            assert.equal(await page.locator('#status-key').isVisible(), true);
+            assert.match(await page.locator('#status-key').innerText(), /not a recorded session or measured productivity/);
+            assert.doesNotMatch(await page.locator('#panel').textContent(), /Baseline |Implementation state:|undefined/);
+            const step = stories[view].phases[phase - 1];
+            if (step.trace) {
+              assert.equal(await page.locator('#trace-cursor').isVisible(), true);
+              const offset = await page.locator('#trace-cursor').evaluate((cursor, trace) => {
+                const path = document.getElementById(trace.flow).querySelector('path:not(.edge-hit)');
+                const expected = path.getPointAtLength(path.getTotalLength() * trace.progress);
+                return Math.hypot(Number(cursor.getAttribute('cx')) - expected.x,
+                  Number(cursor.getAttribute('cy')) - expected.y);
+              }, step.trace);
+              assert.ok(offset < .05, `${view}/${phase}: cursor matches the authored illustrative path`);
+              const prefix = await page.locator('#trace-cursor').evaluate((cursor, trace) => {
+                const path = document.getElementById(trace.flow).querySelector('path:not(.edge-hit)');
+                return {
+                  offset: parseFloat(getComputedStyle(path).strokeDashoffset),
+                  expected: path.getTotalLength() * (1 - trace.progress),
+                  marker: path.getAttribute('marker-end'),
+                };
+              }, step.trace);
+              assert.ok(Math.abs(prefix.offset - prefix.expected) < .05, 'Only the authored path prefix is drawn');
+              assert.equal(prefix.marker, null, 'No execution arrow ahead of the illustrative dot');
+              assert.equal(await page.locator('#trace-cursor').getAttribute('data-animating'), 'false');
+            } else assert.equal(await page.locator('#trace-cursor').isVisible(), false);
+          } else {
+            assert.equal(await page.locator('html').getAttribute('data-journey-kind'), 'architecture');
+            assert.equal(await page.locator('#trace-cursor').count(), 0);
+          }
           if (view === 'plain' && !process.argv[2]) {
             assert.equal(await page.locator('#principle-strip').isVisible(), false);
             assert.equal(await page.locator('html').getAttribute('data-commentary'), 'false');
@@ -206,6 +242,28 @@ const { pathToFileURL } = require('node:url');
         await page.screenshot({ path: path.join(temp, `${layout}-${theme}-${appearance}-${view}-${width}.png`) });
       }
     }
+      const backtrack = views.find(id => id.endsWith('backtrack'));
+      if (backtrack) {
+        await page.setViewportSize({ width: 1920, height: 1080 });
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.goto(`${base}?view=${backtrack}&phase=3&details=0&present=1&layout=stage-ribbon&theme=fluent`);
+        const geometry = await firstGeometry();
+        await page.keyboard.press('PageDown');
+        await page.waitForFunction(() => {
+          const cursor = document.getElementById('trace-cursor');
+          return cursor.dataset.animating === 'true' && Number(cursor.dataset.progress) < .99
+            && Number(cursor.dataset.progress) > .17;
+        });
+        await page.waitForFunction(() => document.getElementById('trace-cursor').dataset.animating === 'false');
+        assert.equal(Number(await page.locator('#trace-cursor').getAttribute('data-progress')), .17);
+        assert.deepEqual(await firstGeometry(), geometry, 'Rewinding the dot must not move the map');
+        await page.keyboard.press('PageDown');
+        await page.keyboard.press('PageUp');
+        await page.waitForFunction(() => document.getElementById('trace-cursor').dataset.animating === 'false');
+        assert.equal(await page.locator('#trace-cursor').getAttribute('data-flow'), 'run-wrong');
+        assert.equal(Number(await page.locator('#trace-cursor').getAttribute('data-progress')), .17);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+      }
     }
     if (bareHtml) {
       await page.goto(`${pathToFileURL(bareHtml).href}?view=plain&phase=1&details=0`);
@@ -248,7 +306,7 @@ const { pathToFileURL } = require('node:url');
     const chosenTheme = await page.locator('html').getAttribute('data-design-theme');
     await page.locator('#present').click();
     // Explicit stageTheme is allowed to switch branding, unlike an inferred theme ID.
-    assert.equal(await page.locator('html').getAttribute('data-design-theme'), hasLocal ? 'midnight' : chosenTheme);
+    assert.equal(await page.locator('html').getAttribute('data-design-theme'), catalog.settings.stageTheme || chosenTheme);
     await page.locator('[data-close="journey-menu"]').click();
     await page.evaluate(() => { window.presenterDesign.design.settings.stageTheme = null; });
     await page.locator('#exit-present').click();
@@ -281,7 +339,7 @@ const { pathToFileURL } = require('node:url');
       await page.locator('#principle-context').click();
       if (await page.locator('#panel .principle-chain').count())
         assert.match(await page.locator('#panel').innerText(), /Requirement:.*Trade-off:.*Evidence limit:/s);
-      else assert.match(await page.locator('#panel').innerText(), /Decision context/i);
+      else assert.match(await page.locator('#panel').innerText(), /Decision context|Illustration context/i);
     } else {
       await page.keyboard.press('KeyC');
       assert.match(await page.locator('#panel').innerText(), /Repository evidence/i);

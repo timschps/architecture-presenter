@@ -2,11 +2,12 @@
 name: architecture-presenter
 description: >
   Build evidence-backed offline architecture presenters with fixed-overview reveals,
-  concrete components and handoffs, NFR principles, and source/target state labels.
+  concrete components and handoffs, optional NFR principles, and source/target state labels.
   Use this skill whenever the user asks for an architecture build-up, architecture
   presenter, interactive architecture walkthrough, project architecture visualization,
   or standard presenter experience across projects, even without naming the skill.
   Also use for independent delivery and engineering-learning journeys in that presenter.
+  Use its optional conceptual branching example to explain agent steering and foundations.
   Not for generic dashboards, application UI redesigns or editing PowerPoint decks.
 ---
 
@@ -38,6 +39,12 @@ broader visual guidance, but must not generate a competing presenter engine.
    `python <skill-root>\scripts\init.py --project-root <project> --name "<title>"`.
    The command refuses an existing output folder. For an existing presenter,
    read and update its sources without overwriting user work.
+   For an explicitly requested agent-steering illustration, add
+   `--example branching --folder agent-journey`. This produces five independent
+   conceptual scenarios, not a default addition to every architecture story.
+   Keep `kind: "conceptual"` and ILLUSTRATIVE node labels. Do not invent
+   deployment state, historical execution, measured productivity or outcome
+   probabilities. It is a narrative type, not a theme or a second engine.
 4. Replace synthetic `story.json` with project-specific content using
    [Data contract](references/DATA_CONTRACT.md). Use short concrete stage labels,
    source files per component, exact artifact/identity handoffs, and deliberate
@@ -53,6 +60,10 @@ broader visual guidance, but must not generate a competing presenter engine.
    principles/decisions or use empty collections. With no commentary, the
    renderer shows architecture and evidence without a forced ribbon.
    Keep historical insights empty unless supported by evidence.
+   For conceptual stories, retain the hypothetical framing and distinguish
+   guiding instructions, enforced permissions, verification and human
+   decisions. Use validated `emphasis` and `trace` fields for manual reveals
+   and the illustrative cursor; never infer actual session telemetry.
 5. Follow the [Design system](references/DESIGN_SYSTEM.md) for styling. Keep
    theme, layout and light/dark appearance separate. Default to Fluent with
    Explore and Stage Ribbon; never infer or force a personal/event theme.
@@ -73,7 +84,7 @@ broader visual guidance, but must not generate a competing presenter engine.
    fixed full-map camera: no initial auto-zoom and no progressive zoom-out.
    Reserve stable caption/ribbon space so text wrapping cannot rescale the map.
    Show text state labels, never color alone. Zoom is explicit only.
-6. Generate with the copied engine:
+6. Generate with the copied engine (substitute the chosen folder when different):
    `python architecture\build.py --input architecture\story.json --project-root <project> --output architecture`.
    Generation rejects missing local evidence and invalid reveal/flow bindings.
    It does not run code, publish, merge, deploy, grant access or contact a service.

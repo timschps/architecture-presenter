@@ -7,6 +7,16 @@ It carries the presenter engine, not any project's architecture or cloud access.
 copilot plugin install timschps/architecture-presenter
 ```
 
+To update an existing installation from this repository:
+
+```powershell
+copilot plugin update architecture-presenter
+copilot plugin list
+```
+
+Updating the plugin preserves local theme libraries and existing project
+snapshots. Use the updated skill in a new session when creating a new presenter.
+
 In a new session, ask:
 
 > Create an architecture presenter for this project using the fixed-overview standard.
@@ -54,6 +64,34 @@ Existing output directories are refused, never overwritten.
 python <installed-skill>\scripts\init.py --project-root . --name "Project architecture"
 python architecture\build.py --input architecture\story.json --project-root . --output architecture
 ```
+
+### Optional agent-steering illustration
+
+Explain the branching metaphor as five independent conceptual journeys:
+possible outcomes, backtracking, patching forward, live steering, and
+foundations before execution.
+
+Ask the agent:
+
+> Create the optional conceptual agent-steering branching example in agent-journey, using the architecture-presenter plugin.
+
+```powershell
+python <installed-skill>\scripts\init.py --project-root . --folder agent-journey --example branching
+python agent-journey\build.py --input agent-journey\story.json --project-root . --output agent-journey
+```
+
+Open `agent-journey\presenter.html`. Next/Previous moves an illustrative dot
+along the chosen path, including backtracking, while the map stays fixed.
+Reduced motion shows each step immediately. The example uses your selected
+theme and the same controls, inspector and offline engine, without video
+dependencies or bundled event branding.
+
+This is an optional narrative type, **not a recorded session or productivity
+benchmark**. Default initialization still creates the architecture starter.
+See [conceptual journeys](skills/architecture-presenter/references/DATA_CONTRACT.md#optional-conceptual-journeys)
+for authoring fields and truth boundaries.
+
+### Local designs and portable snapshots
 
 For a reusable local theme:
 
@@ -106,7 +144,15 @@ Browser tests need Microsoft Edge on Windows, or Playwright Chromium installed
 with `npx playwright install chromium` elsewhere. They open generated files
 offline and verify stable screen coordinates, stage text and overflow at 720p,
 1080p and 4K, reveals, manual zoom, escaping, source links, navigation, blackout
-and narrow viewports. Check actual viewing distance and display readability in
+and narrow viewports. Conceptual checks cover authored path prefixes,
+backtracking, rapid-navigation cancellation and reduced motion.
+To verify a generated presenter with the same checks:
+
+```powershell
+npm test -- agent-journey\presenter.html
+```
+
+Check actual viewing distance and display readability in
 the room; simulated keys do not replace actual clicker rehearsal.
 
 This plugin has no hooks, agents, MCP servers, telemetry or automatic deployment.

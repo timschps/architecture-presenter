@@ -16,6 +16,9 @@ geometry. See [Design system](DESIGN_SYSTEM.md).
 
 - `title`, `label` (tab/menu title), `description`, `scope`, `snapshot`,
   `stepLabel`, `repository` (owner/name), `revision` (source commit).
+  Optional `kind`: `architecture` (default) or `conceptual`. Conceptual
+  journeys may omit repository/revision together; commit or issue links still
+  require both.
 - `phases`: consecutive `n` starting at 1, `title`, `dates`, `summary`,
   `commits` array, `evidence` array.
   Optional `decisions` array, `principles` array, `value`, `tradeoff`, `basis`,
@@ -42,6 +45,56 @@ never mark a live resource from source alone.
 Flow: `from`, `to` component IDs, `path` using positive integer M/H/V commands,
 `label`, label `x`/`y`, `detail`, optional `until`. Flows cannot precede endpoints.
 TARGET handoffs must have `state: "TARGET"` for dashed styling.
+
+## Optional conceptual journeys
+
+Use `kind: "conceptual"` for an explanatory model, not for a deployment,
+historical session replay, probability estimate or measured productivity claim.
+Architecture journeys remain the default and keep their evidence/state checks.
+Do not use conceptual mode to bypass truth labels for real components.
+
+Conceptual nodes require `state: "ILLUSTRATIVE"`. Implementation states such
+as APP or TARGET are rejected in this mode; ILLUSTRATIVE is rejected in
+architecture mode. Conceptual groups/flows may omit state or use ILLUSTRATIVE.
+The footer always identifies the journey as a conceptual illustration.
+
+Conceptual-only fields:
+
+- Flow `alternative`: optional boolean. `true` draws a faint dashed
+  hypothetical path, not another execution.
+- Phase `emphasis`: optional array of active element IDs to highlight,
+  independently of when those elements were introduced.
+- Phase `trace`: optional `{"flow": "run-path", "progress": 0.5}`. The flow
+  must be active and not an alternative; progress is a number from 0 to 1.
+  The dot follows that route and reveals its solid prefix. Lower progress
+  can illustrate backtracking. Moving between routes starts at the new
+  route's beginning, never a straight-line shortcut across the map.
+
+Navigation changes the illustrative dot, not the full-map camera.
+Deep links start at the selected step. Normal motion interpolates within
+the route; reduced motion shows the authored state immediately.
+SVG exports show the final step and dot. Excalidraw exports retain editable
+diagram geometry and dashed alternatives, not animation or playback state.
+
+Create the optional five-scenario example explicitly:
+
+```powershell
+python <skill-root>\scripts\init.py --project-root . --folder agent-journey --example branching
+python agent-journey\build.py --input agent-journey\story.json --project-root . --output agent-journey
+```
+
+It covers possible outcomes, backtracking, patching forward, live steering,
+and foundations before execution. Each scenario is an independent journey.
+Without `--example branching`, initialization still creates the original
+architecture starter. The example needs no video tools, private presentation,
+personal theme, ADRs or original author's session database. Its complete
+story is copied as JSON for offline rebuilding.
+
+Keep the distinction explicit: instructions guide, permissions can block
+prohibited actions, checks reject unacceptable results, and humans handle
+exceptions. Valid alternative designs remain possible. These mechanisms do
+not guarantee correctness, remove review, or establish the shortest completion
+time.
 
 ## Principles and learnings
 
