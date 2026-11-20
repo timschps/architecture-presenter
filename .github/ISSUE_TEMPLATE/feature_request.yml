@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a scoped improvement to the reusable plugin.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and audience
+      description: What cannot be done today? Use a synthetic example, not private project data.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and alternatives
+      description: Explain scope, defaults, compatibility and why existing options are insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: How would we verify the change without weakening offline, evidence or fixed-map guarantees?
+    validations:
+      required: true

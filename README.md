@@ -136,7 +136,7 @@ is not an engine upgrade. Changes to selected project design sources require
 
 ```powershell
 python -m unittest discover -s tests -v
-npm ci
+npm ci --ignore-scripts
 npm test
 ```
 
@@ -156,7 +156,18 @@ Check actual viewing distance and display readability in
 the room; simulated keys do not replace actual clicker rehearsal.
 
 This plugin has no hooks, agents, MCP servers, telemetry or automatic deployment.
-It is a private reusable implementation, not a Microsoft-endorsed product.
+It is an independent reusable implementation, not a Microsoft-endorsed product.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
+`main` requires an up-to-date PR, passing `verify` CI and resolved conversations.
+Contributions require maintainer approval; admins may bypass only the review
+layer for their own PRs, not CI. Squash merges keep history linear, and force
+pushes/deletion of `main` are blocked.
+
+Use the issue and PR templates and synthetic examples. Report vulnerabilities
+privately through [SECURITY.md](SECURITY.md), never in public issues.
 
 The engine was generalized from the owner's architecture-presenter work in
 Superagents, which in turn used the owner's AIDC presenter foundation. Only
