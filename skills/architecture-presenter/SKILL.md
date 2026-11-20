@@ -22,7 +22,7 @@ broader visual guidance, but must not generate a competing presenter engine.
 - Python 3.10+ for generation, Node.js and Playwright for browser checks.
 - Edge on Windows or an installed Playwright Chromium browser.
 - For a supplied PowerPoint, invoke the PPTX skill first. Treat it as read-only.
-  If unavailable, explain the access limit and use the included theme provisionally.
+  If unavailable, explain the access limit and use Fluent provisionally.
 
 ## Workflow
 
@@ -44,7 +44,23 @@ broader visual guidance, but must not generate a competing presenter engine.
    reveal order. All boundaries start at reveal 1; endpoints precede their flows.
    Add principles with requirement, quality attributes, decision, value,
    trade-off, verification and evidence limit. Do not invent historical lessons.
-5. Apply [Presenter standard](references/PRESENTER_STANDARD.md). Preserve the
+5. Follow the [Design system](references/DESIGN_SYSTEM.md) for styling. Keep
+   theme, layout and light/dark appearance separate. Default to Fluent with
+   Explore and Stage Ribbon; never infer or force a personal/event theme.
+   Inspect available designs with `python <skill-root>\scripts\designs.py
+   --project-root <project> list`. Use explicit selection for local themes.
+   Designs may live at presenter, repository, user or machine scope. Use
+   declarative JSON tokens and preset-based layouts, not custom engine/CSS forks.
+   Preserve `presenter.json` and `design.lock.json` for offline portability.
+   Selected local styling is embedded and shared in the generated output.
+   For synced user libraries, run `designs.py libraries discover` to list
+   configured roots without inspecting synced content. Never choose the first
+   OneDrive environment variable automatically. Ask which profile to register
+   or make default; retain device-local paths in `libraries.json`, not shared
+   repository settings. Use portable `userLibrary` profile names for explicit
+   repo/project overrides. Do not merge libraries or move existing designs.
+   Locked rebuilds do not require the original library/profile to be available.
+   Apply [Presenter standard](references/PRESENTER_STANDARD.md). Preserve the
    fixed full-map camera: no initial auto-zoom and no progressive zoom-out.
    Reserve stable caption/ribbon space so text wrapping cannot rescale the map.
    Show text state labels, never color alone. Zoom is explicit only.
@@ -53,20 +69,24 @@ broader visual guidance, but must not generate a competing presenter engine.
    Generation rejects missing local evidence and invalid reveal/flow bindings.
    It does not run code, publish, merge, deploy, grant access or contact a service.
 7. Verify every reveal offline at 1920x1080 and 1280x720, then a narrow viewport,
-   plus Fluent light/dark. Use the plugin's `tests\verify.cjs` with the generated
+   plus supported theme appearances and layouts. Use the plugin's `tests\verify.cjs` with the generated
    HTML path, or adapt its checks without weakening fixed-position assertions.
    Check label bounds, hidden-item focus, source links, manual inspection/zoom,
    navigation, invalid query params, blackout and calibration. Inspect screenshots
    for clipping, connectors through words and insufficient contrast. Fix and rerun.
 8. Deliver the HTML path and concise changes. Preserve source, generator, theme,
-   SVG and Excalidraw companions in the project. Follow its issue/PR convention.
+   design lock, tools, layouts, SVG and Excalidraw companions in the project.
+   Follow its issue/PR convention.
    No merge/deploy or PowerPoint mutation unless separately requested.
 
 ## Output
 
 `architecture\presenter.html` is the offline stage entry.
 `architecture\architecture-evolution.html` is exploration.
-`story.json`, `build.py`, the template and theme are the regeneration sources.
+`story.json`, `build.py`, `design_config.py`, `designs.py`, `user_libraries.py`, the template,
+`layouts.css`, built-in JSON designs, `presenter.json` and `design.lock.json`
+are the regeneration sources. A normal rebuild uses the lock. Explicit design
+overrides or `--refresh-design` re-resolve libraries; do not silently refresh.
 SVG and Excalidraw exports accompany each independent journey.
 
 ## Error handling
@@ -78,6 +98,9 @@ SVG and Excalidraw exports accompany each independent journey.
 | Live state unknown | Label source/target or recorded foundation, not verified live. |
 | Supplied deck inaccessible | Mark styling provisional; do not claim inspected alignment. |
 | Missing browser dependency | Restore the existing manifest or use an available installation; do not claim browser verification. |
+| Invalid/missing selected design | Report the configuration error; do not silently replace an explicit build choice. |
+| Stale project design lock | Explain the changed input and request an intentional `--refresh-design` rebuild. |
+| Unknown/unavailable user library | Report the profile/path and restore availability or explicitly choose `--user-library local`; never silently use another account. |
 | Fullscreen denied | Keep windowed mode and show the engine's visible error. |
 | New project differs from starter | Replace the map, never relabel the example as verified architecture. |
 
@@ -94,3 +117,4 @@ Do not silently edit cached installed copies or global theme files.
 |-----------|-----------|
 | [Data contract](references/DATA_CONTRACT.md) | Authoring or validating content |
 | [Presenter standard](references/PRESENTER_STANDARD.md) | Every presenter build or update |
+| [Design system](references/DESIGN_SYSTEM.md) | Selecting, authoring, or migrating themes/layouts |

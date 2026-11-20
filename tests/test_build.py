@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "skills" / "architecture-presenter" / "scripts"
@@ -18,6 +19,9 @@ spec.loader.exec_module(bootstrap)
 
 class PresenterTests(unittest.TestCase):
     def setUp(self):
+        libraries = patch("design_config.platform_roots", return_value={})
+        libraries.start()
+        self.addCleanup(libraries.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)

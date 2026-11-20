@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "stage",
+  "label": "Stage",
+  "preset": "stage",
+  "options": {}
+}

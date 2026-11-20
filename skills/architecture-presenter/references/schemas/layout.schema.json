@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Presenter layout v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "label", "preset", "options"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$"},
+    "label": {"type": "string", "minLength": 1, "maxLength": 80},
+    "preset": {"enum": ["explore", "stage", "stage-ribbon"]},
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "titleAlign": {"enum": ["left", "center"]},
+        "captionHeight": {"type": "integer", "minimum": 96, "maximum": 140},
+        "explanationHeight": {"type": "integer", "minimum": 110, "maximum": 150},
+        "sidebarWidth": {"type": "integer", "minimum": 280, "maximum": 440},
+        "groupHeaders": {"type": "boolean"},
+        "trackGroupTitles": {"type": "boolean"}
+      }
+    }
+  }
+}

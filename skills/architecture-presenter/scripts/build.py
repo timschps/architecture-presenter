@@ -10,28 +10,30 @@ from pathlib import Path
 import re
 import textwrap
 from typing import Any
+from design_config import (
+    add_design_arguments, argument_overrides, design_css, resolve_design, theme_variables,
+)
 
 
 ROOT = Path(__file__).resolve().parent
 HEIGHT = 76
 SVG_STYLE = """
-svg { font-family: "Segoe UI", Aptos, Calibri, sans-serif; }
+svg { font-family: var(--cp-font); }
 .group-box { fill: none; stroke: var(--cp-border); stroke-width: 1.5; }
 .boundary .group-box { stroke: var(--cp-accent); stroke-dasharray: 8 6; }
 .group-title { fill: var(--cp-text); font-size: 17px; font-weight: 600; }
 .group[data-plane] .group-title { text-anchor: middle; }
 .group-detail { fill: var(--cp-text-muted); font-size: 12px; }
 .group-header { display: none; }
-html[data-brand="ignite"] [data-plane="control"] { --cp-plane: var(--cp-plane-control); }
-html[data-brand="ignite"] [data-plane="build"] { --cp-plane: var(--cp-plane-build); }
-html[data-brand="ignite"] [data-plane="hosting"] { --cp-plane: var(--cp-plane-hosting); }
-html[data-brand="ignite"] [data-plane="access"] { --cp-plane: var(--cp-plane-access); }
-html[data-brand="ignite"] [data-plane="lifecycle"] { --cp-plane: var(--cp-plane-lifecycle); }
-html[data-brand="ignite"] .group[data-plane] .group-box { stroke: var(--cp-plane); stroke-width: 2; rx: 18px; }
-html[data-brand="ignite"] .group[data-plane] .group-header { display: block; fill: var(--cp-surface); }
-html[data-brand="ignite"] .node[data-plane] .node-box { fill: var(--cp-surface); rx: 10px; }
-html[data-brand="ignite"] .node[data-plane].new .node-box { stroke: var(--cp-plane); stroke-width: 3; }
-html[data-brand="ignite"] .edge[data-plane] path:not(.edge-hit) { stroke: var(--cp-plane); stroke-width: 2; }
+[data-plane="control"] { --cp-plane: var(--cp-plane-control); }
+[data-plane="build"] { --cp-plane: var(--cp-plane-build); }
+[data-plane="hosting"] { --cp-plane: var(--cp-plane-hosting); }
+[data-plane="access"] { --cp-plane: var(--cp-plane-access); }
+[data-plane="lifecycle"] { --cp-plane: var(--cp-plane-lifecycle); }
+.group[data-plane] .group-box { stroke: var(--cp-plane); stroke-width: 2; }
+[data-group-headers="true"] .group[data-plane] .group-header { display: block; fill: var(--cp-surface); }
+.node[data-plane].new .node-box { stroke: var(--cp-plane); stroke-width: 3; }
+.edge[data-plane] path:not(.edge-hit) { stroke: var(--cp-plane); stroke-width: 2; }
 .node-box { fill: var(--cp-surface); stroke: var(--cp-border-strong); }
 .node-title { fill: var(--cp-text); font-size: 16px; font-weight: 600; }
 .node-detail { fill: var(--cp-text-muted); font-size: 12px; }
@@ -267,7 +269,7 @@ def build_excalidraw(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build(input_path: Path, output_dir: Path, project_root: Path) -> None:
+def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None, refresh=False, roots=None) -> None:
     project_root = project_root.resolve(strict=True)
     content = json.loads(input_path.read_text(encoding="utf-8"))
     principles = content["principles"]
@@ -312,7 +314,9 @@ def build(input_path: Path, output_dir: Path, project_root: Path) -> None:
                 raise ValueError(f"{insight['id']}: unknown focus target.")
     assets = ROOT if (ROOT / "presenter-template.html").exists() else ROOT.parent / "assets"
     template = (assets / "presenter-template.html").read_text(encoding="utf-8")
-    theme = (assets / "microsoft-theme.css").read_text(encoding="utf-8")
+    design = resolve_design(project_root, input_path.resolve().parent, overrides, refresh, roots)
+    theme = design_css(design)
+    layouts = (assets / "layouts.css").read_text(encoding="utf-8")
     diagrams = {name: build_svg(data) for name, data in views.items()}
     # Escape '<' so source text cannot terminate the embedded script element.
     embedded = json.dumps(views, ensure_ascii=True).replace("<", "\\u003c")
@@ -320,13 +324,15 @@ def build(input_path: Path, output_dir: Path, project_root: Path) -> None:
     embedded_insights = json.dumps(insights, ensure_ascii=True).replace("<", "\\u003c")
     replacements = {
         "__THEME__": theme,
+        "__LAYOUTS__": layouts,
+        "__DESIGN__": json.dumps({k: design[k] for k in ("settings", "themes", "layouts")}).replace("<", "\\u003c"),
         "__SVG__": next(iter(diagrams.values())),
         "__DATA__": embedded,
         "__DIAGRAMS__": embedded_diagrams,
         "__INSIGHTS__": embedded_insights,
         "__PRINCIPLES__": json.dumps(principles).replace("<", "\\u003c"),
         "__PROJECT__": escape(content["project"]["name"]),
-        "__THEME_NOTE__": escape(content["project"]["themeNote"]),
+        "__THEME_NOTE__": escape(content["project"].get("themeNote", "")),
         "__JOURNEYS__": json.dumps({key: value["label"] for key, value in views.items()}).replace("<", "\\u003c"),
         "__TABS__": "".join(
             f'<button class="tab" id="{key}-tab" role="tab" type="button" data-view="{key}" aria-controls="canvas">{escape(value["label"])}</button>'
@@ -343,7 +349,10 @@ def build(input_path: Path, output_dir: Path, project_root: Path) -> None:
         encoding="utf-8",
     )
     for name, data in views.items():
-        static_svg = diagrams[name].replace("<defs>", f"<style>{theme}</style><defs>", 1)
+        export_theme = design["themes"][design["settings"]["theme"]]
+        appearance = design["settings"]["appearance"]
+        static_svg = diagrams[name].replace(
+            'id="diagram"', f'id="diagram" style=\'{theme_variables(export_theme, appearance)}\'', 1)
         (output_dir / f"{name}.svg").write_text(
             static_svg, encoding="utf-8"
         )
@@ -357,5 +366,9 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    add_design_arguments(parser)
     args = parser.parse_args()
-    build(args.input, args.output, args.project_root)
+    try:
+        build(args.input, args.output, args.project_root, argument_overrides(args), args.refresh_design)
+    except (ValueError, OSError) as error:
+        parser.exit(2, f"{error}\n")

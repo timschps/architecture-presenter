@@ -60,6 +60,6 @@ def create_story(name):
                         stepLabel="Reveal", phases=phases, groups=groups, components=nodes, flows=flows)
     principles_view = deepcopy(architecture)
     principles_view.update(label="Principles to decisions", stepLabel="Principle")
-    return dict(project=dict(name=name, themeNote="Included deck-inspired tokens; no project-specific deck alignment claimed."),
+    return dict(project=dict(name=name, themeNote="Built-in Fluent styling; no project-specific brand alignment claimed."),
                 views=dict(architecture=architecture, principles=principles_view),
                 principles=principles, insights=dict(items=[]))

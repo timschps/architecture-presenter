@@ -6,21 +6,56 @@
 <title>__PROJECT__ | Architecture presenter</title>
 <script>
 (() => {
+  const design = __DESIGN__;
   const params = new URLSearchParams(location.search);
   const root = document.documentElement;
-  root.dataset.theme = ["light", "dark"].includes(params.get("scoutTheme"))
-    ? params.get("scoutTheme") : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   const presenting = params.has("present") ? params.get("present") === "1" : root.dataset.launch === "presenter";
   root.dataset.present = String(presenting);
-  root.dataset.brand = params.get("brand") === "ignite" || (!params.has("brand") && presenting) ? "ignite" : "fluent";
   root.dataset.details = params.has("details") ? String(params.get("details") === "1") : String(!presenting);
+  const messages = [];
+  const choose = (value, valid, fallback, kind) => {
+    if (valid(value)) return value;
+    messages.push(`Unavailable ${kind}; using the embedded default.`);
+    return fallback;
+  };
+  const settings = design.settings;
+  const themeDefault = presenting && settings.stageTheme ? settings.stageTheme : settings.theme;
+  const state = {
+    design, messages,
+    theme: choose(params.get("theme") ?? params.get("brand") ?? themeDefault,
+      value => Object.hasOwn(design.themes, value), themeDefault, "theme"),
+    appearance: choose(params.get("appearance") ?? params.get("scoutTheme") ?? settings.appearance,
+      value => ["system", "light", "dark"].includes(value), settings.appearance, "appearance"),
+    exploreLayout: settings.exploreLayout, stageLayout: settings.stageLayout,
+    apply() {
+      const theme = design.themes[this.theme];
+      const requested = this.appearance === "system"
+        ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : this.appearance;
+      root.dataset.designTheme = this.theme;
+      root.dataset.appearance = Object.hasOwn(theme.appearances, requested) ? requested : theme.defaultAppearance;
+      const id = root.dataset.present === "true" ? this.stageLayout : this.exploreLayout;
+      const layout = design.layouts[id];
+      root.dataset.layout = id;
+      root.dataset.layoutPreset = layout.preset;
+      root.dataset.groupHeaders = String(layout.options.groupHeaders);
+      root.dataset.trackGroupTitles = String(layout.options.trackGroupTitles);
+    },
+  };
+  for (const [key, isExplore] of [["exploreLayout", true], ["stageLayout", false]]) {
+    const value = params.get(key) ?? ((presenting !== isExplore) ? params.get("layout") : null);
+    if (value !== null) state[key] = choose(value,
+      id => Object.hasOwn(design.layouts, id) && (design.layouts[id].preset === "explore") === isExplore,
+      settings[key], "layout");
+  }
+  window.presenterDesign = state;
+  state.apply();
 })();
 </script>
 <style>
 __THEME__
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--cp-bg); color: var(--cp-text); font: 14px/1.5 "Segoe UI", Aptos, Calibri, sans-serif; }
+body { margin: 0; background: var(--cp-bg); color: var(--cp-text); font: 14px/1.5 var(--cp-font); }
 button, input { font: inherit; }
 button { cursor: pointer; border: 1px solid var(--cp-border); background: var(--cp-surface); color: var(--cp-text); border-radius: 4px; padding: 7px 12px; }
 button:hover { border-color: var(--cp-accent); }
@@ -38,7 +73,7 @@ button:disabled { opacity: .4; cursor: default; }
 .primary { background: var(--cp-accent); border-color: var(--cp-accent); color: var(--cp-accent-fg); }
 .caption { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 20px 0 8px; }
 .eyebrow { color: var(--cp-accent-text, var(--cp-accent)); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
-h1 { margin: 0; font-family: "Segoe UI Semibold", "Segoe UI", Aptos, Calibri, sans-serif; font-size: clamp(24px, 2.6vw, 38px); line-height: 1.18; letter-spacing: -.025em; font-weight: 600; }
+h1 { margin: 0; font-family: var(--cp-font); font-size: clamp(24px, 2.6vw, 38px); line-height: 1.18; letter-spacing: -.025em; font-weight: 600; }
 .takeaway { margin: 8px 0 0; color: var(--cp-text-muted); max-width: 1200px; font-size: 15px; }
 .stamp { color: var(--cp-text-muted); font-size: 12px; text-align: right; align-self: start; padding-top: 8px; max-width: 260px; }
 .stamp.local { color: var(--cp-accent); }
@@ -134,23 +169,6 @@ html[data-present="true"] .principle-strip:has(.implementation-key) .decision { 
 html[data-present="true"] .implementation-key { grid-column: 1 / -1; padding-top: 8px; }
 html[data-present="true"] .inspector p, html[data-present="true"] .inspector li { font-size: 15px; }
 html[data-present="true"] .inspector .source-note { font-size: 11px; }
-html[data-present="true"][data-brand="ignite"] .caption { display: block; text-align: center; padding: 8px 0 4px; }
-html[data-present="true"][data-brand="ignite"] .eyebrow { display: inline-block; padding: 4px 18px; border-radius: 0 0 12px 12px; background: var(--cp-surface); color: var(--cp-text-soft); letter-spacing: .03em; margin-bottom: 8px; }
-html[data-present="true"][data-brand="ignite"] h1 { font-family: "Segoe UI Semibold", "Segoe UI", sans-serif; font-weight: 600; }
-html[data-present="true"][data-brand="ignite"] .drawing { grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
-html[data-present="true"][data-brand="ignite"] .canvas { grid-row: 1; }
-html[data-present="true"][data-brand="ignite"] .principle-strip { grid-row: 2; border: 0; border-radius: 14px; padding: 8px 20px; margin-bottom: 12px;
-  background: linear-gradient(var(--cp-ribbon-shade), var(--cp-ribbon-shade)), linear-gradient(100deg, var(--cp-ribbon-start), var(--cp-ribbon-mid), var(--cp-ribbon-end)); }
-html[data-present="true"][data-brand="ignite"] .principle-strip p { color: var(--cp-text); }
-html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementation-key) { grid-template-columns: 1fr 1.5fr 1.5fr; column-gap: 20px; }
-html[data-present="true"][data-brand="ignite"] .map-tradeoff,
-html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementation-key) .decision { border-left: 1px solid var(--cp-divider); padding-left: 20px; }
-html[data-present="true"][data-brand="ignite"] .implementation-key { color: var(--cp-text); }
-html[data-present="true"][data-brand="ignite"] .group[data-plane] .group-title { text-anchor: middle; }
-@media (min-width: 901px) {
-  html[data-present="true"][data-brand="ignite"] .caption { height: 108px; }
-  html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementation-key) { height: 110px; }
-}
 @media (max-width: 900px) {
   .shell { padding: 0 16px; height: auto; min-height: 100dvh; }
   .toolbar { flex-wrap: wrap; padding: 12px 0; gap: 8px 16px; }
@@ -172,10 +190,8 @@ html[data-present="true"][data-brand="ignite"] .group[data-plane] .group-title {
   html[data-present="true"][data-details="true"] .workbench { grid-template-rows: minmax(0, 1fr) minmax(0, .8fr); }
   html[data-present="true"] .stage-tools button { padding: 6px; font-size: 12px; }
   html[data-present="true"] .principle-strip:has(.implementation-key) { grid-template-columns: 1fr; }
-  html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementation-key) { grid-template-columns: 1fr; }
-  html[data-present="true"][data-brand="ignite"] .map-tradeoff,
-  html[data-present="true"][data-brand="ignite"] .principle-strip:has(.implementation-key) .decision { border-left: 0; padding-left: 0; }
 }
+__LAYOUTS__
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
 @media print { .toolbar, .transport { display: none; } .shell { display: block; height: auto; } .canvas svg { min-width: 0; height: auto; } }
 </style>
@@ -188,7 +204,7 @@ html[data-present="true"][data-brand="ignite"] .group[data-plane] .group-title {
       __TABS__
     </nav>
     <div class="tools">
-      <button class="quiet" id="theme" type="button">Appearance</button>
+      <button class="quiet" id="theme" type="button">Design</button>
       <button class="quiet" id="journeys-open" type="button">Journeys</button>
       <button class="quiet" id="settings-open" type="button">Clicker</button>
       <button class="primary" id="present" type="button">Present</button>
@@ -226,6 +242,7 @@ html[data-present="true"][data-brand="ignite"] .group[data-plane] .group-title {
       <span class="position" id="sequence"></span>
       <span class="legend"><b>Highlighted:</b> introduced now &nbsp; / &nbsp; Faint: introduced later</span>
       <div class="stage-tools">
+        <button class="quiet" id="stage-design" type="button">Design</button>
         <button class="quiet" id="stage-journeys" type="button">Journeys</button>
         <button class="quiet" id="fullscreen" type="button">Full screen</button>
         <button class="quiet" id="stage-settings" type="button">Clicker</button>
@@ -252,6 +269,14 @@ html[data-present="true"][data-brand="ignite"] .group[data-plane] .group-title {
   <p class="hint">F: full screen. B: blank/resume. M: journey menu. C: context. + / -: zoom. 0: overview. Escape returns from a zoom or selection before leaving stage mode. Next and Previous stay in the selected journey. Focus a diagram item and press Enter to inspect it.</p>
   <p class="hint">__THEME_NOTE__ No PowerPoint is changed by this presenter.</p>
 </dialog>
+<dialog id="design-settings" aria-labelledby="design-title">
+  <div class="dialog-head"><h2 id="design-title">Presenter design</h2><button type="button" data-close="design-settings">Close</button></div>
+  <label class="setting-row">Theme <select id="design-theme"></select></label>
+  <label class="setting-row">Appearance <select id="design-appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+  <label class="setting-row">Layout <select id="design-layout"></select></label>
+  <p class="hint" id="design-effective" role="status"></p>
+  <p class="hint">Only embedded designs are available offline. Bookmark the current URL to retain your selections.</p>
+</dialog>
 <div id="notice" role="status" hidden></div>
 <div id="blackout" aria-label="Presentation blanked" hidden></div>
 <script>
@@ -264,6 +289,7 @@ const JOURNEYS = __JOURNEYS__;
 const ORDER = Object.keys(JOURNEYS);
 const params = new URLSearchParams(location.search);
 const root = document.documentElement;
+const designState = window.presenterDesign;
 let view = ORDER.includes(params.get("view")) ? params.get("view") : ORDER[0];
 let DATA = VIEWS[view];
 let current = 1;
@@ -289,7 +315,11 @@ const active = item => item.phase <= current && (!item.until || current <= item.
 
 function syncUrl() {
   const url = new URL(location.href);
-  for (const [key, value] of Object.entries({view, phase: current, present: isPresenting() ? 1 : 0, brand: root.dataset.brand, scoutTheme: root.dataset.theme, details: root.dataset.details === "true" ? 1 : 0})) url.searchParams.set(key, value);
+  for (const key of ["brand", "scoutTheme"]) url.searchParams.delete(key);
+  for (const [key, value] of Object.entries({view, phase: current, present: isPresenting() ? 1 : 0,
+    theme: designState.theme, appearance: designState.appearance, layout: root.dataset.layout,
+    exploreLayout: designState.exploreLayout, stageLayout: designState.stageLayout,
+    details: root.dataset.details === "true" ? 1 : 0})) url.searchParams.set(key, value);
   for (const [key, value] of Object.entries({nextKey, previousKey, focus: selected})) {
     if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
   }
@@ -361,7 +391,7 @@ function setCamera(box) {
     width, height,
   };
   canvas.querySelector("svg").setAttribute("viewBox", `${camera.x} ${camera.y} ${width} ${height}`);
-  if (root.dataset.brand === "ignite") {
+  if (root.dataset.trackGroupTitles === "true") {
     canvas.querySelectorAll(".group[data-plane]").forEach(group => {
       const box = group.querySelector(".group-box").getBBox();
       const left = Math.max(box.x, camera.x);
@@ -489,9 +519,9 @@ function advance(direction) {
 function setPresenting(enabled) {
   stop();
   root.dataset.present = String(enabled);
+  if (enabled && designState.design.settings.stageTheme) designState.theme = designState.design.settings.stageTheme;
+  designState.apply();
   if (enabled) {
-    root.dataset.brand = "ignite";
-    root.dataset.theme = "dark";
     setDetails(false);
   } else {
     document.getElementById("blackout").hidden = true;
@@ -541,6 +571,7 @@ document.addEventListener("keydown", event => {
     learning = null; syncUrl(); return;
   }
   const direction = directionFor(event);
+  if (document.getElementById("design-settings").open) return;
   if (settings.open) {
     if (direction) {
       event.preventDefault();
@@ -684,11 +715,33 @@ document.getElementById("reset-bindings").addEventListener("click", () => {
   document.getElementById("previous-binding").textContent = "None";
   document.getElementById("key-test").textContent = "Custom keys reset. Standard clicker keys remain enabled.";
 });
-document.getElementById("theme").addEventListener("click", () => {
-  if (root.dataset.brand === "ignite") { root.dataset.brand = "fluent"; root.dataset.theme = "light"; }
-  else if (root.dataset.theme === "light") root.dataset.theme = "dark";
-  else root.dataset.brand = "ignite";
-  syncUrl();
+function updateDesignControls() {
+  const {themes, layouts} = designState.design;
+  document.getElementById("design-theme").innerHTML = Object.entries(themes).map(([id, theme]) =>
+    `<option value="${id}">${esc(theme.label)}</option>`).join("");
+  document.getElementById("design-theme").value = designState.theme;
+  document.getElementById("design-appearance").value = designState.appearance;
+  for (const option of document.getElementById("design-appearance").options) {
+    option.disabled = option.value !== "system" && !Object.hasOwn(themes[designState.theme].appearances, option.value);
+  }
+  document.getElementById("design-layout").innerHTML = Object.entries(layouts)
+    .filter(([, layout]) => (layout.preset !== "explore") === isPresenting())
+    .map(([id, layout]) => `<option value="${id}">${esc(layout.label)}</option>`).join("");
+  document.getElementById("design-layout").value = root.dataset.layout;
+  document.getElementById("design-effective").textContent =
+    `Effective appearance: ${root.dataset.appearance}. Supported: ${Object.keys(themes[designState.theme].appearances).join(", ")}.`;
+}
+for (const id of ["theme", "stage-design"]) document.getElementById(id).addEventListener("click", () => {
+  stop(); updateDesignControls(); document.getElementById("design-settings").showModal();
+});
+for (const [id, key] of [["design-theme", "theme"], ["design-appearance", "appearance"], ["design-layout", null]]) {
+  document.getElementById(id).addEventListener("change", event => {
+    designState[key || (isPresenting() ? "stageLayout" : "exploreLayout")] = event.target.value;
+    designState.apply(); updateDesignControls(); overview();
+  });
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  designState.apply(); updateDesignControls();
 });
 document.addEventListener("visibilitychange", () => { if (document.hidden) stop(); });
 if (nextKey && nextKey === previousKey) {
@@ -698,6 +751,7 @@ if (nextKey && nextKey === previousKey) {
 const initial = params.get("phase");
 setView(view, initial === null || initial.trim() === "" ? (isPresenting() ? 1 : DATA.phases.length) : Number(initial));
 setDetails(root.dataset.details === "true");
+if (designState.messages.length) notify([document.getElementById("notice").textContent, ...designState.messages].filter(Boolean).join(" "));
 if (params.get("focus")) {
   inspect(params.get("focus"));
   if (params.get("details") === "0") setDetails(false);

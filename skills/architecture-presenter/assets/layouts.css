@@ -1,0 +1,45 @@
+html[data-present="true"] .caption {
+  text-align: var(--cp-title-align);
+  display: block;
+  padding: 8px 0 4px;
+}
+html[data-present="true"] .principle-strip {
+  overflow: auto;
+}
+html[data-group-headers="true"] .group-box { rx: 18px; }
+html[data-group-headers="true"] .node-box { rx: 10px; }
+html[data-layout-preset="stage-ribbon"] .eyebrow {
+  display: inline-block; padding: 4px 18px; border-radius: 0 0 12px 12px;
+  background: var(--cp-surface); color: var(--cp-text-soft); letter-spacing: .03em;
+  margin-bottom: 8px;
+}
+html[data-layout-preset="stage-ribbon"] .drawing { grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+html[data-layout-preset="stage-ribbon"] .canvas { grid-row: 1; }
+html[data-layout-preset="stage-ribbon"] .principle-strip {
+  grid-row: 2; border: 0; border-radius: 14px; padding: 8px 20px; margin-bottom: 12px;
+  background: linear-gradient(var(--cp-ribbon-shade), var(--cp-ribbon-shade)),
+    linear-gradient(100deg, var(--cp-ribbon-start), var(--cp-ribbon-mid), var(--cp-ribbon-end));
+}
+html[data-layout-preset="stage-ribbon"] .principle-strip p { color: var(--cp-text); }
+html[data-layout-preset="stage-ribbon"] .principle-strip:has(.implementation-key) { column-gap: 20px; }
+html[data-layout-preset="stage-ribbon"] .map-tradeoff,
+html[data-layout-preset="stage-ribbon"] .principle-strip:has(.implementation-key) .decision {
+  border-left: 1px solid var(--cp-divider); padding-left: 20px;
+}
+html[data-layout-preset="stage-ribbon"] .implementation-key { color: var(--cp-text); }
+@media (min-width: 901px) {
+  .caption { height: var(--cp-caption-height); overflow: auto; }
+  .principle-strip { height: var(--cp-explanation-height); overflow: auto; }
+  html[data-details="true"] .workbench {
+    grid-template-columns: minmax(0, 1fr) var(--cp-sidebar-width);
+  }
+}
+@media (max-width: 900px) {
+  html[data-layout-preset="stage-ribbon"] .principle-strip:has(.implementation-key) { grid-template-columns: 1fr; }
+  html[data-layout-preset="stage-ribbon"] .map-tradeoff,
+  html[data-layout-preset="stage-ribbon"] .principle-strip:has(.implementation-key) .decision {
+    border-left: 0; padding-left: 0;
+  }
+  html[data-present="true"] .principle-strip { max-height: 34dvh; }
+  html[data-present="true"] .caption { max-height: 24dvh; overflow: auto; }
+}

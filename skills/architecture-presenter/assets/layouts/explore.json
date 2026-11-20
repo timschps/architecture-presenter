@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "explore",
+  "label": "Explore",
+  "preset": "explore",
+  "options": {"captionHeight": 140}
+}

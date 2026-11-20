@@ -26,14 +26,16 @@ requirement -> decision -> value -> trade-off -> verification -> evidence limit.
 
 ## Visuals
 
-Microsoft Fluent is the neutral exploration default. Stage mode has a separate
-dark deck-inspired skin: Segoe UI, generous boundaries, inset dark headers,
-restrained responsibility accents and a bottom principle/value/trade-off ribbon.
-Included stage colors are extracted tokens, not distributed presentation assets.
-Use `var(--cp-*)` in component CSS; literals belong in theme definitions only.
+Microsoft Fluent is the default theme in exploration and presentation.
+Explore, Stage and Stage Ribbon are independent layout presets. Appearance is
+system, light or dark, constrained by the selected theme's supported variants.
+Use semantic `var(--cp-*)` colors and system-font choices in component CSS;
+palette literals belong in validated JSON theme definitions.
+Personal/event themes belong in local libraries, never hard-coded engine branches.
+See [Design system](DESIGN_SYSTEM.md) for resolution and portable snapshots.
 
-A supplied current deck takes precedence for project-local styling after actual
-inspection. Never claim exact visual alignment from an inaccessible URL.
+A supplied current deck can inform an explicitly selected local theme after
+actual inspection. Never claim exact alignment from an inaccessible URL.
 Keep controls and calibration out of the audience diagram, with optional evidence.
 Do not use a dashboard card grid in place of a directional architecture diagram.
 
@@ -48,5 +50,5 @@ editable controls. M: journeys, C: context, F: fullscreen, B: blackout,
 0: overview, +/-: zoom. Provide calibration and explicit start/end notices.
 
 Verify every journey at projector sizes with identical screen coordinates and
-scale across reveals, plus responsive overflow, both Fluent themes, focus and
+scale across reveals, plus responsive overflow, supported appearances, focus and
 offline operation. Hardware rehearsal is separate from simulated key checks.

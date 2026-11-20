@@ -6,7 +6,9 @@ The bootstrap generates a complete editable example. Coordinates are native
 
 ## Project and journeys
 
-`project`: `name`, `themeNote` describing actual styling provenance.
+`project`: `name`, optional `themeNote` describing actual styling provenance.
+Design selection belongs in `presenter.json` and `design.lock.json`, not story
+geometry. See [Design system](DESIGN_SYSTEM.md).
 `views`: nonempty map keyed by lowercase HTML-safe IDs (for example
 `architecture`, `principles`, `delivery`, `learn`). Each has:
 

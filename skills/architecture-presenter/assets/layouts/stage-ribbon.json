@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "stage-ribbon",
+  "label": "Stage Ribbon",
+  "preset": "stage-ribbon",
+  "options": {"groupHeaders": true, "trackGroupTitles": true}
+}

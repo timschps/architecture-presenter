@@ -27,14 +27,15 @@ required to generate or present it.
 - Concrete components and typed artifact/data/identity handoffs.
 - Principle, value, trade-off and evidence limits accompany each reveal.
 - Implemented, foundation, external and target states remain explicit.
-- Microsoft Fluent exploration and a separate deck-inspired stage skin.
+- Microsoft Fluent by default, with independent theme, layout and appearance choices.
 - Manual-only zoom, contextual evidence, clicker controls, blackout and fullscreen.
 - Offline HTML plus SVG and editable Excalidraw companions.
 
-The included stage colors were extracted from an owner-supplied BRK285 reference:
-slate blue, cyan, magenta, purple and blue. No slide content, images, fonts or
-presentation file is distributed. A new deck can override project-local theme
-tokens without changing the engine or other projects.
+Choose Explore, Stage, or Stage Ribbon independently of branding. Define local
+JSON themes and preset-based layouts at project, repository, user, or machine
+scope, without forking the engine. Personal/event branding is not bundled.
+See the [design system guide](skills/architecture-presenter/references/DESIGN_SYSTEM.md)
+for precedence, authoring, validation, and migration.
 
 ## Project-local generation
 
@@ -46,13 +47,44 @@ python <installed-skill>\scripts\init.py --project-root . --name "Project archit
 python architecture\build.py --input architecture\story.json --project-root . --output architecture
 ```
 
+For a reusable local theme:
+
+```powershell
+python architecture\designs.py --project-root . new themes company --scope user
+# Edit the reported JSON path, then:
+python architecture\designs.py --project-root . select --theme user:company
+python architecture\build.py --input architecture\story.json --project-root . --output architecture
+```
+
+The Design dialog selects embedded themes, appearance, and layouts. Present
+does not force event branding. `design.lock.json` snapshots selected definitions
+so recipients can rebuild offline without your local libraries. Only selected
+local designs are shared; a library's unselected themes are not copied.
+
+User libraries can also live in OneDrive or another synced folder. Named
+profiles map portable names such as `work` and `personal` to device-local
+paths. Account discovery never chooses or merges accounts automatically:
+
+```powershell
+python architecture\designs.py libraries discover
+python architecture\designs.py libraries list
+```
+
+See [synced user libraries](skills/architecture-presenter/references/DESIGN_SYSTEM.md#synced-user-libraries-and-multiple-onedrive-accounts)
+for registration, explicit default selection, repository overrides, and
+copying existing designs without moving the originals.
+
 The engine accepts JSON, not executable project plugins. The starter explicitly
 uses synthetic target components and is not an architecture assessment.
 Replace it with project evidence before delivery. Read the skill's
 [data contract](skills/architecture-presenter/references/DATA_CONTRACT.md).
 
 Updates to the installed plugin do not silently rewrite project-local snapshots.
-Review engine/theme changes before copying them into an existing project.
+Review engine/design changes before copying them into an existing project.
+New snapshots include `design_config.py`, `designs.py`, `user_libraries.py`, `layouts.css`, `themes`,
+`layouts`, `presenter.json`, and `design.lock.json`; copying only `build.py`
+is not an engine upgrade. Changes to selected project design sources require
+`--refresh-design`. Old generated pages remain unchanged.
 
 ## Validation
 

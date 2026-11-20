@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Presenter theme v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "label", "defaultAppearance", "appearances"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$"},
+    "label": {"type": "string", "minLength": 1, "maxLength": 80},
+    "base": {"const": "fluent"},
+    "font": {"enum": ["segoe", "system", "arial"]},
+    "defaultAppearance": {"enum": ["light", "dark"]},
+    "appearances": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "light": {"$ref": "#/$defs/tokens"},
+        "dark": {"$ref": "#/$defs/tokens"}
+      }
+    }
+  },
+  "$defs": {
+    "tokens": {
+      "type": "object",
+      "propertyNames": {
+        "enum": ["bg", "bg-elevated", "surface", "surface-soft", "border", "border-strong", "text", "text-muted", "text-soft", "accent", "accent-hover", "accent-text", "accent-soft", "accent-fg", "success", "danger", "warning", "link", "overlay", "panel", "panel-strong", "sheen", "highlight", "blackout", "plane-control", "plane-build", "plane-hosting", "plane-access", "plane-lifecycle", "ribbon-start", "ribbon-mid", "ribbon-end", "ribbon-shade", "divider"]
+      },
+      "additionalProperties": {"type": "string", "pattern": "^#[a-fA-F0-9]{6}([a-fA-F0-9]{2})?$"}
+    }
+  }
+}

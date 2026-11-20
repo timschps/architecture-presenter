@@ -11,8 +11,9 @@ const { pathToFileURL } = require('node:url');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'architecture-presenter-'));
   const project = path.join(temp, 'project');
   fs.mkdirSync(project);
+  const env = { ...process.env, ARCHITECTURE_PRESENTER_CONFIG_ROOT: path.join(temp, 'libraries') };
   const run = args => {
-    const result = spawnSync('python', args, { encoding: 'utf8' });
+    const result = spawnSync('python', args, { encoding: 'utf8', env });
     assert.equal(result.status, 0, result.stderr);
   };
   let html = process.argv[2] && path.resolve(process.argv[2]);
@@ -27,6 +28,21 @@ const { pathToFileURL } = require('node:url');
     run([path.join(project, 'architecture', 'build.py'), '--input', storyPath,
       '--project-root', project, '--output', path.join(project, 'architecture')]);
     html = path.join(project, 'architecture', 'presenter.html');
+    const clean = fs.readFileSync(html, 'utf8');
+    assert.ok(!clean.includes('ignite') && !clean.includes('BRK285'), 'No owner theme in clean distribution');
+    const localTheme = path.join(project, 'architecture', 'themes', 'midnight.json');
+    fs.writeFileSync(localTheme, JSON.stringify({
+      schemaVersion: 1, id: 'midnight', label: 'Midnight <local>', base: 'fluent',
+      defaultAppearance: 'dark', appearances: { dark: { accent: '#aabbcc' } },
+    }));
+    const localLayout = path.join(project, 'architecture', 'layouts', 'workshop.json');
+    fs.writeFileSync(localLayout, JSON.stringify({
+      schemaVersion: 1, id: 'workshop', label: 'Workshop', preset: 'stage-ribbon',
+      options: { captionHeight: 120, explanationHeight: 120, groupHeaders: true, trackGroupTitles: true },
+    }));
+    run([path.join(project, 'architecture', 'build.py'), '--input', storyPath,
+      '--project-root', project, '--output', path.join(project, 'architecture'),
+      '--stage-theme', 'project:midnight', '--stage-layout', 'project:workshop']);
   }
   const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : undefined });
   try {
@@ -44,10 +60,18 @@ const { pathToFileURL } = require('node:url');
     await page.goto(base);
     await page.waitForFunction(() => document.getElementById('phase-title').textContent);
     const views = await page.locator('[data-journey]').evaluateAll(nodes => nodes.map(n => n.dataset.journey));
+    const hasLocal = await page.evaluate(() => Object.hasOwn(window.presenterDesign.design.themes, 'midnight'));
+    const combinations = [
+      ...['explore', 'stage', 'stage-ribbon'].flatMap(layout =>
+        ['light', 'dark'].map(appearance => ({ layout, theme: 'fluent', appearance }))),
+      ...(hasLocal ? ['explore', 'stage', 'stage-ribbon', 'workshop'].map(layout =>
+        ({ layout, theme: 'midnight', appearance: 'dark' })) : []),
+    ];
+    for (const { layout, theme, appearance } of combinations) {
     for (const [width, height] of [[1280, 720], [1920, 1080]]) {
       await page.setViewportSize({ width, height });
       for (const view of views) {
-        await page.goto(`${base}?view=${view}&phase=1&details=0`);
+        await page.goto(`${base}?view=${view}&phase=1&details=0&present=${layout === 'explore' ? 0 : 1}&layout=${layout}&theme=${theme}&appearance=${appearance}`);
         const count = Number(await page.locator('#slider').getAttribute('max'));
         const initial = await firstGeometry();
         for (let phase = 1; phase <= count; phase++) {
@@ -83,13 +107,54 @@ const { pathToFileURL } = require('node:url');
         assert.equal(await page.locator('#blackout').isVisible(), true);
         await page.keyboard.press('Space');
         assert.equal(await page.locator('#blackout').isVisible(), false);
-        await page.screenshot({ path: path.join(temp, `${view}-${width}.png`) });
+        await page.waitForFunction(() => [...document.querySelectorAll('.node:not(.future):not(.gone)')]
+          .every(node => getComputedStyle(node).opacity === '1'));
+        await page.screenshot({ path: path.join(temp, `${layout}-${theme}-${appearance}-${view}-${width}.png`) });
       }
+    }
     }
     for (const theme of ['light', 'dark']) {
       await page.goto(`${base}?view=${views[0]}&phase=1&present=0&brand=fluent&scoutTheme=${theme}&details=0`);
-      assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
+      assert.equal(await page.locator('html').getAttribute('data-appearance'), theme);
+      assert.equal(await page.locator('html').getAttribute('data-design-theme'), 'fluent');
     }
+    await page.goto(`${base}?view=${views[0]}&phase=1&details=0&theme=fluent&layout=stage`);
+    await page.locator('#stage-design').click();
+    await page.locator('#design-layout').selectOption('stage-ribbon');
+    assert.equal(await page.locator('html').getAttribute('data-design-theme'), 'fluent');
+    await page.locator('#design-appearance').selectOption('light');
+    if (hasLocal) {
+      await page.locator('#design-theme').selectOption('midnight');
+      assert.equal(await page.locator('html').getAttribute('data-layout'), 'stage-ribbon');
+      assert.equal(await page.locator('html').getAttribute('data-appearance'), 'dark');
+      assert.match(await page.locator('#design-effective').innerText(), /Supported: dark/);
+      assert.equal(await page.locator('#design-appearance option[value="light"]').evaluate(option => option.disabled), true,
+        JSON.stringify(errors));
+    }
+    await page.locator('[data-close="design-settings"]').click();
+    const designUrl = page.url();
+    await page.reload();
+    assert.equal(page.url(), designUrl, 'Design choices round-trip in URL');
+    await page.locator('#exit-present').click();
+    assert.equal(await page.locator('html').getAttribute('data-layout'), 'explore');
+    const chosenTheme = await page.locator('html').getAttribute('data-design-theme');
+    await page.locator('#present').click();
+    // Explicit stageTheme is allowed to switch branding, unlike an inferred theme ID.
+    assert.equal(await page.locator('html').getAttribute('data-design-theme'), hasLocal ? 'midnight' : chosenTheme);
+    await page.locator('[data-close="journey-menu"]').click();
+    await page.evaluate(() => { window.presenterDesign.design.settings.stageTheme = null; });
+    await page.locator('#exit-present').click();
+    await page.locator('#theme').click();
+    await page.locator('#design-theme').selectOption('fluent');
+    await page.locator('[data-close="design-settings"]').click();
+    await page.locator('#present').click();
+    assert.equal(await page.locator('html').getAttribute('data-design-theme'), 'fluent',
+      'Present never infers an event theme');
+    await page.locator('[data-close="journey-menu"]').click();
+    await page.goto(`${base}?phase=1&theme=missing&layout=missing&appearance=missing`);
+    assert.match(await page.locator('#notice').innerText(), /Unavailable theme.*Unavailable appearance.*Unavailable layout/);
+    await page.goto(`${base}?phase=1&brand=ignite`);
+    assert.match(await page.locator('#notice').innerText(), /Unavailable theme/);
     await page.goto(`${base}?view=${views[0]}&phase=1&details=0`);
     await page.keyboard.down('ArrowRight');
     await page.keyboard.down('ArrowRight');
@@ -111,8 +176,15 @@ const { pathToFileURL } = require('node:url');
     assert.equal(await page.locator('#slider').inputValue(), '1');
     assert.match(await page.locator('#notice').innerText(), /not active/);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${base}?view=${views[0]}&present=1&details=0`);
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    for (const layout of ['explore', 'stage', 'stage-ribbon']) {
+      await page.goto(`${base}?view=${views[0]}&present=${layout === 'explore' ? 0 : 1}&details=0&layout=${layout}`);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), layout);
+    }
+    await page.goto(`${base}?view=${views[0]}&phase=1`);
+    await page.evaluate(() => { document.documentElement.requestFullscreen = () => Promise.reject(new Error('Test denial')); });
+    await page.locator('#fullscreen').click();
+    await page.waitForFunction(() => document.getElementById('notice').textContent.includes('Test denial'));
+    assert.match(await page.locator('#notice').innerText(), /Windowed stage mode still works/);
     assert.deepEqual(errors, []);
     assert.deepEqual(requests, []);
     console.log(`PASS: declarative generation, arbitrary journeys, fixed overview, stable coordinates, manual zoom, focus, blackout, deep links, themes, responsive and offline. Screenshots: ${temp}`);
