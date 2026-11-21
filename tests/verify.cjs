@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
+const { createHash } = require('node:crypto');
 
 (async () => {
   const root = path.resolve(__dirname, '..');
@@ -49,6 +50,32 @@ const { pathToFileURL } = require('node:url');
     mixed.phases[4].basis = 'proposed';
     story.views.plain = plain;
     story.views.mixed = mixed;
+    const iconView = JSON.parse(JSON.stringify(plain));
+    iconView.label = 'Synthetic icons';
+    iconView.description = 'Synthetic icon fixture, not official artwork or deployment evidence.';
+    iconView.components[0].name = 'Azure Functions';
+    iconView.components[0].service = 'azure:functions';
+    story.views.icons = iconView;
+    const iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#0078d4" d="M1 1H15V15H1Z"/></svg>';
+    const bytesHash = text => createHash('sha256').update(text).digest('hex');
+    const ordered = value => Array.isArray(value) ? value.map(ordered)
+      : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value;
+    const jsonHash = value => bytesHash(JSON.stringify(ordered(value)));
+    const terms = 'Synthetic test artwork; this is not a Microsoft icon pack.';
+    const iconLock = {
+      schemaVersion: 1, services: ['azure:functions'], choicesHash: jsonHash({}),
+      icons: { 'azure:functions': {
+        name: 'Function-Apps.svg', id: 'function-apps', sha256: bytesHash(iconSvg),
+        source: 'https://learn.microsoft.com/en-us/azure/architecture/icons/',
+        download: 'https://arch-center.azureedge.net/icons/test.zip',
+        terms, termsHash: bytesHash(terms), packHash: bytesHash('synthetic-fixture'),
+      } },
+    };
+    iconLock.hash = jsonHash(iconLock);
+    const iconFolder = path.join(project, 'architecture', 'icon-assets');
+    fs.mkdirSync(iconFolder);
+    fs.writeFileSync(path.join(iconFolder, `${bytesHash(iconSvg)}.svg`), iconSvg);
+    fs.writeFileSync(path.join(project, 'architecture', 'icons.lock.json'), JSON.stringify(iconLock));
     story.principles.P1.basis = 'documented';
     story.principles.P1.evidence = ['evidence.txt'];
     story.views.system.phases[0].basis = 'documented';
@@ -78,7 +105,8 @@ const { pathToFileURL } = require('node:url');
     const bareStory = { ...story, views: { plain } };
     delete bareStory.principles;
     delete bareStory.insights;
-    const bareStoryPath = path.join(project, 'architecture', 'bare-story.json');
+    fs.mkdirSync(path.join(project, 'bare'));
+    const bareStoryPath = path.join(project, 'bare', 'bare-story.json');
     fs.writeFileSync(bareStoryPath, JSON.stringify(bareStory));
     run([path.join(project, 'architecture', 'build.py'), '--input', bareStoryPath,
       '--project-root', project, '--output', path.join(project, 'bare')]);
@@ -196,6 +224,19 @@ const { pathToFileURL } = require('node:url');
             }
             for (const node of document.querySelectorAll('.node:not(.future):not(.gone)')) {
               const box = node.querySelector('rect').getBBox();
+              const image = node.querySelector('.service-icon');
+              if (image) {
+                const bounds = image.getBBox();
+                if (!image.getAttribute('href').startsWith('data:image/svg+xml;base64,'))
+                  result.push(`${node.id}: icon is not self-contained`);
+                if (bounds.x < box.x || bounds.y < box.y || bounds.x + bounds.width > box.x + box.width
+                    || bounds.y + bounds.height > box.y + box.height)
+                  result.push(`${node.id}: icon overflows its node`);
+                for (const label of node.querySelectorAll('.node-title,.node-detail')) {
+                  if (getComputedStyle(label).display !== 'none' && label.getBBox().x < bounds.x + bounds.width + 6)
+                    result.push(`${node.id}: icon overlaps its label`);
+                }
+              }
               for (const label of node.querySelectorAll('text')) {
                 if (getComputedStyle(label).display === 'none') continue;
                 const text = label.getBBox();
