@@ -53,6 +53,10 @@ Use semantic `var(--cp-*)` colors and system-font choices in component CSS;
 palette literals belong in validated JSON theme definitions.
 Personal/event themes belong in local libraries, never hard-coded engine branches.
 See [Design system](DESIGN_SYSTEM.md) for resolution and portable snapshots.
+Optional [official icons](ICON_ASSETS.md) preserve provider colors and aspect
+ratio, nearby service names and text state labels. Reserve icon/title space
+without moving nodes between reveals. Download/update consent is separate
+from theme selection; browser output stays offline and snapshots stay pinned.
 
 A supplied current deck can inform an explicitly selected local theme after
 actual inspection. Never claim exact alignment from an inaccessible URL.
