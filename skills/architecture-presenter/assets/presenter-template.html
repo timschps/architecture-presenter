@@ -293,6 +293,7 @@ const VIEWS = __DATA__;
 const DIAGRAMS = __DIAGRAMS__;
 const INSIGHTS = __INSIGHTS__;
 const PRINCIPLES = __PRINCIPLES__;
+const ICONS = __ICONS__;
 const JOURNEYS = __JOURNEYS__;
 const ORDER = Object.keys(JOURNEYS);
 const params = new URLSearchParams(location.search);
@@ -389,6 +390,11 @@ function renderEvidence(phase) {
     ${item.state === "ILLUSTRATIVE" ? `<p><b>Illustrative element:</b> a conceptual example, not a deployed component or recorded action.</p>` : item.state ? `<p><b>Implementation state:</b> ${esc(item.state)}. ${item.state === "TARGET" ? "Proposed or uncommissioned capability, not verified live." : item.state === "FOUNDATION" ? "Recorded infrastructure, not proof of workload or data-plane execution." : item.state === "SOURCE" ? "Implemented source contract or handler, not evidence that the full end-to-end path is enabled." : item.state === "EXTERNAL" ? "External responsibility, not a service implemented by this project." : "Application implementation; deployment claims require separate dated evidence."}</p>` : ""}
     <p>${esc(item.detail || (item.lines || []).join(". "))}</p>
     ${itemEvidence}
+    ${item.service && ICONS[item.service] ? `<h3>Product icon provenance</h3>
+      <p><code>${esc(item.service)}</code>:
+      <a href="${esc(ICONS[item.service].source)}" target="_blank" rel="noopener noreferrer">Microsoft icon source</a>.</p>
+      <p class="source-note">Pack ${esc(ICONS[item.service].packHash)}.
+      Terms ${esc(ICONS[item.service].termsHash)}. An icon is not deployment evidence.</p>` : ""}
     <p class="hint">Introduced in ${esc(DATA.stepLabel.toLowerCase())} ${item.phase}: ${esc(origin.title)}.</p>
     ${item.from ? `<p>${inspectLink(itemFor(item.from))} &rarr; ${inspectLink(itemFor(item.to))}</p>` : ""}` : `<p class="hint">${esc(phase.status || phase.dates)}</p><h3>What changed</h3><p>${esc(phase.summary)}</p>`}
     ${principleNotes}

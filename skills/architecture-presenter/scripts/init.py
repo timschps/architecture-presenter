@@ -6,12 +6,14 @@ from pathlib import Path
 import shutil
 from starter import create_story
 from branching import create_branching_story
+from icons import monitor
 from design_config import (
     add_design_arguments, argument_overrides, resolve_design, write_json,
 )
 
 
-def initialize(project_root, folder="architecture", name=None, overrides=None, roots=None, example="architecture"):
+def initialize(project_root, folder="architecture", name=None, overrides=None, roots=None, example="architecture",
+               offline_icons=False):
     if example not in ("architecture", "branching"):
         raise ValueError("Example must be architecture or branching.")
     name = name or ("Agent branching" if example == "branching" else "Project architecture")
@@ -23,8 +25,9 @@ def initialize(project_root, folder="architecture", name=None, overrides=None, r
         raise FileExistsError(f"Refusing to overwrite existing directory: {target}")
     source = Path(__file__).resolve().parent
     lock = resolve_design(project, target, overrides, roots=roots, persist=False)
+    monitor(project, target, roots, lock.get("userLibrary"), offline_icons)
     target.mkdir(parents=True)
-    for file in ("build.py", "design_config.py", "designs.py", "user_libraries.py"):
+    for file in ("build.py", "design_config.py", "designs.py", "user_libraries.py", "icons.py"):
         shutil.copy2(source / file, target / file)
     for file in ("presenter-template.html", "layouts.css"):
         shutil.copy2(source.parent / "assets" / file, target / file)
@@ -50,9 +53,11 @@ if __name__ == "__main__":
     parser.add_argument("--folder", default="architecture")
     parser.add_argument("--name")
     parser.add_argument("--example", choices=("architecture", "branching"), default="architecture")
+    parser.add_argument("--offline-icons", action="store_true", help="Skip approved icon update checks")
     add_design_arguments(parser)
     args = parser.parse_args()
     try:
-        initialize(args.project_root, args.folder, args.name, argument_overrides(args), example=args.example)
+        initialize(args.project_root, args.folder, args.name, argument_overrides(args), example=args.example,
+                   offline_icons=args.offline_icons)
     except (ValueError, OSError) as error:
         parser.exit(2, f"{error}\n")
