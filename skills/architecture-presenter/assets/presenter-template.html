@@ -78,7 +78,7 @@ h1 { margin: 0; font-family: var(--cp-font); font-size: clamp(24px, 2.6vw, 38px)
 .stamp { color: var(--cp-text-muted); font-size: 12px; text-align: right; align-self: start; padding-top: 8px; max-width: 260px; }
 .stamp.local { color: var(--cp-accent); }
 .canvas { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; outline: none; user-select: none; }
-.canvas svg { display: block; width: 100%; height: 100%; }
+.canvas > svg { display: block; width: 100%; height: 100%; }
 .workbench { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; min-width: 0; }
 html[data-details="true"] .workbench { grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; }
 .drawing { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
@@ -185,7 +185,7 @@ html[data-present="true"] .inspector .source-note { font-size: 11px; }
   .caption { grid-template-columns: 1fr; }
   .stamp { text-align: left; }
   .canvas { min-height: 500px; justify-content: start; }
-  .canvas svg { min-width: 1000px; height: auto; }
+  .canvas > svg { min-width: 1000px; height: auto; }
   html[data-details="true"] .workbench { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .inspector { border-left: 0; border-top: 1px solid var(--cp-border); padding-left: 0; max-height: 55dvh; }
   .camera-tools .hint { display: none; }
@@ -193,14 +193,14 @@ html[data-present="true"] .inspector .source-note { font-size: 11px; }
   .controls { flex-wrap: wrap; }
   html[data-present="true"] .shell { height: 100dvh; }
   html[data-present="true"] .canvas { min-height: 0; }
-  html[data-present="true"] .canvas svg { min-width: 0; height: 100%; }
+  html[data-present="true"] .canvas > svg { min-width: 0; height: 100%; }
   html[data-present="true"][data-details="true"] .workbench { grid-template-rows: minmax(0, 1fr) minmax(0, .8fr); }
   html[data-present="true"] .stage-tools button { padding: 6px; font-size: 12px; }
   html[data-present="true"] .principle-strip:has(.implementation-key) { grid-template-columns: 1fr; }
 }
 __LAYOUTS__
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
-@media print { .toolbar, .transport { display: none; } .shell { display: block; height: auto; } .canvas svg { min-width: 0; height: auto; } }
+@media print { .toolbar, .transport { display: none; } .shell { display: block; height: auto; } .canvas > svg { min-width: 0; height: auto; } }
 </style>
 </head>
 <body>
@@ -392,7 +392,7 @@ function renderEvidence(phase) {
     ${itemEvidence}
     ${item.service && ICONS[item.service] ? `<h3>Product icon provenance</h3>
       <p><code>${esc(item.service)}</code>:
-      <a href="${esc(ICONS[item.service].source)}" target="_blank" rel="noopener noreferrer">Microsoft icon source</a>.</p>
+      <a href="${esc(ICONS[item.service].source)}" target="_blank" rel="noopener noreferrer">Official icon source</a>.</p>
       <p class="source-note">Pack ${esc(ICONS[item.service].packHash)}.
       Terms ${esc(ICONS[item.service].termsHash)}. An icon is not deployment evidence.</p>` : ""}
     <p class="hint">Introduced in ${esc(DATA.stepLabel.toLowerCase())} ${item.phase}: ${esc(origin.title)}.</p>
@@ -460,7 +460,7 @@ function setCamera(box) {
     y: Math.max(-100, Math.min(800 - height, box.y + (box.height - height) / 2)),
     width, height,
   };
-  canvas.querySelector("svg").setAttribute("viewBox", `${camera.x} ${camera.y} ${width} ${height}`);
+  canvas.querySelector(":scope > svg").setAttribute("viewBox", `${camera.x} ${camera.y} ${width} ${height}`);
   if (root.dataset.trackGroupTitles === "true") {
     canvas.querySelectorAll(".group[data-plane]").forEach(group => {
       const box = group.querySelector(".group-box").getBBox();
@@ -727,7 +727,7 @@ canvas.addEventListener("click", event => {
 canvas.addEventListener("wheel", event => {
   if (!event.ctrlKey) return;
   event.preventDefault(); stop();
-  const svg = canvas.querySelector("svg");
+  const svg = canvas.querySelector(":scope > svg");
   const point = svg.createSVGPoint();
   point.x = event.clientX; point.y = event.clientY;
   zoom(event.deltaY < 0 ? .9 : 1.1, point.matrixTransform(svg.getScreenCTM().inverse()));
@@ -735,7 +735,7 @@ canvas.addEventListener("wheel", event => {
 canvas.addEventListener("pointerdown", event => {
   dragged = false;
   if (event.button !== 0 || canvas.dataset.zoomed !== "true") return;
-  const matrix = canvas.querySelector("svg").getScreenCTM();
+  const matrix = canvas.querySelector(":scope > svg").getScreenCTM();
   drag = {id: event.pointerId, x: event.clientX, y: event.clientY, camera: {...camera}, scaleX: matrix.a, scaleY: matrix.d};
 });
 window.addEventListener("pointermove", event => {

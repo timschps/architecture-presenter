@@ -55,15 +55,18 @@ const { createHash } = require('node:crypto');
     iconView.description = 'Synthetic icon fixture, not official artwork or deployment evidence.';
     iconView.components[0].name = 'Azure Functions';
     iconView.components[0].service = 'azure:functions';
+    iconView.components[1].name = 'GitHub repo';
+    iconView.components[1].service = 'octicons:repo';
     story.views.icons = iconView;
     const iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#0078d4" d="M1 1H15V15H1Z"/></svg>';
+    const glyphSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M1 1H15V15H1Z"/></svg>';
     const bytesHash = text => createHash('sha256').update(text).digest('hex');
     const ordered = value => Array.isArray(value) ? value.map(ordered)
       : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value;
     const jsonHash = value => bytesHash(JSON.stringify(ordered(value)));
     const terms = 'Synthetic test artwork; this is not a Microsoft icon pack.';
     const iconLock = {
-      schemaVersion: 1, services: ['azure:functions'], choicesHash: jsonHash({}),
+      schemaVersion: 1, services: ['azure:functions', 'octicons:repo'], choicesHash: jsonHash({}),
       icons: { 'azure:functions': {
         name: 'Function-Apps.svg', id: 'function-apps', sha256: bytesHash(iconSvg),
         source: 'https://learn.microsoft.com/en-us/azure/architecture/icons/',
@@ -71,10 +74,19 @@ const { createHash } = require('node:crypto');
         terms, termsHash: bytesHash(terms), packHash: bytesHash('synthetic-fixture'),
       } },
     };
+    iconLock.icons['octicons:repo'] = {
+      name: 'octicons-fixture/icons/repo-16.svg', id: 'repo-16', sha256: bytesHash(glyphSvg),
+      source: 'https://github.com/primer/octicons',
+      download: `https://codeload.github.com/primer/octicons/zip/${'1'.repeat(40)}`,
+      terms: 'Synthetic UI glyph fixture, not Octicons artwork.',
+      termsHash: bytesHash('Synthetic UI glyph fixture, not Octicons artwork.'),
+      packHash: bytesHash('synthetic-glyph-fixture'),
+    };
     iconLock.hash = jsonHash(iconLock);
     const iconFolder = path.join(project, 'architecture', 'icon-assets');
     fs.mkdirSync(iconFolder);
     fs.writeFileSync(path.join(iconFolder, `${bytesHash(iconSvg)}.svg`), iconSvg);
+    fs.writeFileSync(path.join(iconFolder, `${bytesHash(glyphSvg)}.svg`), glyphSvg);
     fs.writeFileSync(path.join(project, 'architecture', 'icons.lock.json'), JSON.stringify(iconLock));
     story.principles.P1.basis = 'documented';
     story.principles.P1.evidence = ['evidence.txt'];
@@ -144,7 +156,7 @@ const { createHash } = require('node:crypto');
         const initial = await firstGeometry();
         for (let phase = 1; phase <= count; phase++) {
           assert.equal(await page.locator('#slider').inputValue(), String(phase));
-          assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'), '0 0 1490 700');
+          assert.equal(await page.locator('#canvas > svg').getAttribute('viewBox'), '0 0 1490 700');
           assert.equal(await page.locator('.group.future').count(), 0);
           assert.deepEqual(await firstGeometry(), initial, `${view}/${phase}: stable screen coordinates at ${width}`);
           if (stories[view].kind === 'conceptual') {
@@ -226,9 +238,40 @@ const { createHash } = require('node:crypto');
               const box = node.querySelector('rect').getBBox();
               const image = node.querySelector('.service-icon');
               if (image) {
-                const bounds = image.getBBox();
-                if (!image.getAttribute('href').startsWith('data:image/svg+xml;base64,'))
+                const glyph = image.classList.contains('service-glyph');
+                const bounds = glyph ? Object.fromEntries(['x', 'y', 'width', 'height']
+                  .map(key => [key, Number(image.getAttribute(key))])) : image.getBBox();
+                if (!glyph && !(image.getAttribute('href') || '').startsWith('data:image/svg+xml;base64,'))
                   result.push(`${node.id}: icon is not self-contained`);
+                if (glyph) {
+                  const actual = image.getBoundingClientRect();
+                  const viewportProbe = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                  const viewBox = image.viewBox.baseVal;
+                  for (const key of ['x', 'y', 'width', 'height'])
+                    viewportProbe.setAttribute(key, viewBox[key]);
+                  viewportProbe.style.fill = 'none';
+                  viewportProbe.style.stroke = 'none';
+                  image.appendChild(viewportProbe);
+                  const viewport = viewportProbe.getBoundingClientRect();
+                  viewportProbe.remove();
+                  const nodeBox = node.querySelector('rect').getBoundingClientRect();
+                  const scale = node.getScreenCTM();
+                  const expectedWidth = bounds.width * Math.hypot(scale.a, scale.b);
+                  const expectedHeight = bounds.height * Math.hypot(scale.c, scale.d);
+                  if (Math.abs(viewport.width - expectedWidth) > 1 || Math.abs(viewport.height - expectedHeight) > 1
+                      || actual.left < viewport.left - 1 || actual.top < viewport.top - 1
+                      || actual.right > viewport.right + 1 || actual.bottom > viewport.bottom + 1
+                      || actual.left < nodeBox.left - 1 || actual.top < nodeBox.top - 1
+                      || actual.right > nodeBox.right + 1 || actual.bottom > nodeBox.bottom + 1)
+                    result.push(`${node.id}: inline glyph viewport is enlarged or outside its node`);
+                  const probe = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                  probe.style.fill = 'var(--cp-fg)';
+                  image.appendChild(probe);
+                  const expected = getComputedStyle(probe).fill;
+                  probe.remove();
+                  if (getComputedStyle(image.querySelector('path')).fill !== expected)
+                    result.push(`${node.id}: UI glyph does not follow theme foreground`);
+                }
                 if (bounds.x < box.x || bounds.y < box.y || bounds.x + bounds.width > box.x + box.width
                     || bounds.y + bounds.height > box.y + box.height)
                   result.push(`${node.id}: icon overflows its node`);
