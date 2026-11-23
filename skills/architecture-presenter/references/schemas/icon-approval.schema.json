@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Architecture Presenter icon provider approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "provider", "termsHash", "updates"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "provider": {"enum": ["azure", "microsoft365", "power-platform", "github", "octicons"]},
+    "termsHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "updates": {"enum": ["auto", "notify", "off"]}
+  }
+}

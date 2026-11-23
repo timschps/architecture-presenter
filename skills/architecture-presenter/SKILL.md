@@ -84,6 +84,32 @@ broader visual guidance, but must not generate a competing presenter engine.
    fixed full-map camera: no initial auto-zoom and no progressive zoom-out.
    Reserve stable caption/ribbon space so text wrapping cannot rescale the map.
    Show text state labels, never color alone. Zoom is explicit only.
+   Official service icons are optional. Follow [Icon assets](references/ICON_ASSETS.md):
+   inspect the provider's source/terms and ask the user before downloading,
+   unless an explicit matching terms-hash approval is already configured.
+   Never infer consent from tool permissions. Use explicit `service` IDs and
+   real product labels; ask about ambiguous variants instead of guessing.
+   For unambiguous Microsoft products identified in source or the user's story,
+   suggest/use approved catalogue matches and add their service IDs. Do not
+   infer Azure/Microsoft products from generic labels such as "database".
+   Use `github` for permitted GitHub brand-logo use; use `octicons` for repositories,
+   issues, PRs and workflow/UI symbols. Do not present UI glyphs as product logos
+   or assume GitHub's brand pack grants general diagram/marketing rights.
+   Keep the Octicons MIT notice. Its UI glyphs follow the theme foreground;
+   brand logos are not recolored.
+   All scopes share a per-user device-local icon cache outside synced theme
+   libraries and the installed plugin. Shared files do not grant consent.
+   Recommend explicit user-scope approval for cross-project reuse when the
+   user wants it, otherwise retain project scope. Inspect `icons.py storage`.
+   Legacy approved caches are readable; `icons.py migrate` copies verified
+   assets without moving files or widening approval. Never silently move
+   OneDrive themes, cache folders or consent policies.
+   Approved `auto` policies check on tool use at most once daily and cache
+   newer packs only under unchanged terms. Changed terms require renewed consent.
+   Existing `icons.lock.json` snapshots stay pinned until `--refresh-icons`.
+   Use `--offline-icons` when no network checks are permitted. No idle monitor
+   or scheduler is installed. Preserve original brand colors, asset proportions and fixed
+   map geometry; icons are not evidence of implementation or deployment.
 6. Generate with the copied engine (substitute the chosen folder when different):
    `python architecture\build.py --input architecture\story.json --project-root <project> --output architecture`.
    Generation rejects missing local evidence and invalid reveal/flow bindings.
@@ -108,6 +134,9 @@ broader visual guidance, but must not generate a competing presenter engine.
 are the regeneration sources. A normal rebuild uses the lock. Explicit design
 overrides or `--refresh-design` re-resolve libraries; do not silently refresh.
 SVG and Excalidraw exports accompany each independent journey.
+Snapshots also include `icons.py`; when icons are selected, retain
+`icon-assets`, `icons.lock.json` and optional `icon-selections.json`.
+HTML/SVG include images; Excalidraw currently retains geometry/text only.
 
 ## Error handling
 
@@ -138,3 +167,4 @@ Do not silently edit cached installed copies or global theme files.
 | [Data contract](references/DATA_CONTRACT.md) | Authoring or validating content |
 | [Presenter standard](references/PRESENTER_STANDARD.md) | Every presenter build or update |
 | [Design system](references/DESIGN_SYSTEM.md) | Selecting, authoring, or migrating themes/layouts |
+| [Icon assets](references/ICON_ASSETS.md) | Consent, official icons, caching, update checks and pinned assets |

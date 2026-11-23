@@ -132,6 +132,52 @@ New snapshots include `design_config.py`, `designs.py`, `user_libraries.py`, `la
 is not an engine upgrade. Changes to selected project design sources require
 `--refresh-design`. Old generated pages remain unchanged.
 
+## Optional official service icons
+
+Declare an explicit component `service`, such as `azure:functions` or
+`power-platform:dataverse`. The plugin uses official Azure, Microsoft 365,
+Power Platform and GitHub logo packs, plus GitHub's Octicons UI symbols,
+never image search. Coverage varies; missing/ambiguous
+matches retain text labels until explicitly resolved.
+
+Icon acquisition requires provider-specific consent:
+
+```powershell
+python architecture\icons.py --project-root . inspect azure
+# Read the source and terms, then approve their exact displayed hash:
+python architecture\icons.py --project-root . approve azure --terms-hash "<termsHash>" --scope user --updates auto
+python architecture\build.py --input architecture\story.json --project-root . --output architecture --refresh-icons
+```
+
+Approved `auto` policies check during initialization/building, at most once per
+24 hours, and proactively cache newer packs under unchanged terms. Changed
+terms require renewed approval. No scheduler or background daemon is installed.
+Add `--offline-icons` for a strictly offline tool run.
+
+Selected images, sources/terms and content hashes are pinned in
+`icons.lock.json` and `icon-assets`. Cache updates do not rewrite existing
+presenters; `--refresh-icons` is intentional. HTML/SVG remain offline and
+preserve original brand colors and fixed map coordinates. Excalidraw currently
+exports geometry/text without images.
+
+Each OS user has one device-local cache shared across projects and independent
+of OneDrive theme profiles or plugin installation. On Windows it is
+`%LOCALAPPDATA%\architecture-presenter\icons\cache`. Approval scope is still
+explicit; a cached pack does not authorize another project. Inspect locations
+with `python architecture\icons.py --project-root . storage`.
+Existing approved v1.4 caches remain readable; `icons.py migrate azure` copies
+verified bytes centrally without moving originals or broadening consent.
+
+For GitHub modules, use `octicons:repo`, `octicons:issues`,
+`octicons:pull-request` or `octicons:actions` (a workflow glyph).
+Octicons UI symbols are not product logos; their MIT notice is retained and
+they follow the theme foreground. GitHub brand logos require their separate
+guidelines/consent and remain unmodified.
+
+See [Icon assets](skills/architecture-presenter/references/ICON_ASSETS.md)
+for scoped consent, device caching, legacy libraries, variants and update controls.
+Upgrading an engine snapshot also requires the new `icons.py` helper.
+
 ## Validation
 
 ```powershell
@@ -155,6 +201,8 @@ npm test -- agent-journey\presenter.html
 Check actual viewing distance and display readability in
 the room; simulated keys do not replace actual clicker rehearsal.
 
+Optional consent-gated icon acquisition contacts official Microsoft sources;
+generated presenters never fetch icons at runtime.
 This plugin has no hooks, agents, MCP servers, telemetry or automatic deployment.
 It is an independent reusable implementation, not a Microsoft-endorsed product.
 

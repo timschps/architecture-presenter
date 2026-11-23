@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from dataclasses import dataclass, field
 from html import escape
 import json
@@ -10,9 +11,11 @@ import math
 from pathlib import Path
 import re
 import textwrap
+import xml.etree.ElementTree as ET
+from icons import SERVICE, monitor, resolve_icons, safe_glyph
 from typing import Any
 from design_config import (
-    add_design_arguments, argument_overrides, design_css, resolve_design, theme_variables,
+    add_design_arguments, argument_overrides, design_css, read_json, resolve_design, theme_variables,
 )
 
 
@@ -61,6 +64,10 @@ svg { font-family: var(--cp-font); }
 .edge[data-alternative="true"]:is(:focus, .selected) { opacity: 1; }
 .edge[data-alternative="true"] path:not(.edge-hit) { stroke-dasharray: 7 6; }
 .trace-cursor { fill: var(--cp-accent); stroke: var(--cp-accent-fg); stroke-width: 3; pointer-events: none; }
+.service-icon { pointer-events: none; }
+.service-glyph { color: var(--cp-fg); fill: currentColor; }
+.service-glyph [fill]:not([fill="none"]) { fill: currentColor; }
+.service-glyph [stroke]:not([stroke="none"]) { stroke: currentColor; }
 .future, .future path.edge-hit { pointer-events: none; }
 [data-phase] { transition: opacity .35s ease; }
 @media (prefers-reduced-motion: reduce) { [data-phase] { transition: none; } }
@@ -79,6 +86,7 @@ class Node:
     state: str = ""
     evidence: list[str] = field(default_factory=list)
     plane: str = ""
+    service: str = ""
 
 
 def evidence_exists(path: str, project_root: Path) -> bool:
@@ -117,6 +125,9 @@ def validate_data(data: dict[str, Any], project_root: Path) -> dict[str, Any]:
     if len(set(ids)) != len(ids):
         raise ValueError("Every group, component and flow must have a unique ID.")
     for item in elements:
+        if "service" in item and (item not in data["components"] or not isinstance(item["service"], str)
+                                  or not SERVICE.fullmatch(item["service"])):
+            raise ValueError("Service icons require an explicit supported provider:service ID on a node.")
         if not re.fullmatch(r"[a-z][a-z0-9-]*", item["id"]):
             raise ValueError(f"Invalid element ID: {item['id']}.")
         if not 1 <= item["phase"] <= count:
@@ -186,7 +197,7 @@ def interactive(item: dict[str, Any], label: str) -> str:
     )
 
 
-def build_svg(data: dict[str, Any]) -> str:
+def build_svg(data: dict[str, Any], icons=None, icon_sources=None) -> str:
     conceptual = data.get("kind") == "conceptual"
     final = data["phases"][-1]
     emphasis = final.get("emphasis", []) if conceptual else []
@@ -197,6 +208,7 @@ def build_svg(data: dict[str, Any]) -> str:
         f'viewBox="0 0 1490 700" data-kind="{data.get("kind", "architecture")}" role="group" aria-labelledby="diagram-title diagram-desc">',
         f'<title id="diagram-title">{escape(data["title"])}</title>',
         f'<desc id="diagram-desc">{escape(data["description"])}</desc>',
+        f'<metadata id="icon-provenance">{escape(json.dumps(icon_sources or {}))}</metadata>',
         f"<style>{SVG_STYLE}</style>",
         '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" '
         'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
@@ -245,16 +257,33 @@ def build_svg(data: dict[str, Any]) -> str:
         parts.append("</g>")
     for item in data["components"]:
         node = Node(**item)
+        icon = (icons or {}).get(node.service)
+        text_x = node.x + (60 if icon else 14)
         parts.append(
             f'<g {interactive(item, node.name + (" / " + node.state if node.state else ""))} class="node{" new current" if node.id in emphasis else ""}">'
             f'<rect class="node-box" x="{node.x}" y="{node.y}" '
             f'width="{node.width}" height="{HEIGHT}" rx="4"/>'
-            f'<text class="node-title" x="{node.x + 14}" y="{node.y + (33 if node.state else 25)}">'
+        )
+        if icon:
+            if node.service.startswith("octicons:"):
+                safe_glyph(icon)
+                glyph = ET.fromstring(icon.decode("utf-8-sig"))
+                glyph.attrib.update({"class": "service-icon service-glyph", "x": str(node.x + 14),
+                                     "y": str(node.y + 28), "width": "32", "height": "32",
+                                     "preserveAspectRatio": "xMidYMid meet", "aria-hidden": "true"})
+                ET.register_namespace("", "http://www.w3.org/2000/svg")
+                parts.append(ET.tostring(glyph, encoding="unicode"))
+            else:
+                parts.append(f'<image class="service-icon" x="{node.x + 14}" y="{node.y + 28}" '
+                             f'width="32" height="32" preserveAspectRatio="xMidYMid meet" aria-hidden="true" '
+                             f'href="data:image/svg+xml;base64,{base64.b64encode(icon).decode()}"/>')
+        parts.append(
+            f'<text class="node-title" x="{text_x}" y="{node.y + (33 if node.state else 25)}">'
             f'{escape(node.name)}</text>'
         )
         for index, line in enumerate(node.lines):
             parts.append(
-                f'<text class="node-detail" x="{node.x + 14}" '
+                f'<text class="node-detail" x="{text_x}" '
                 f'y="{node.y + (51 if node.state else 46) + index * 17}">{escape(line)}</text>'
             )
         if node.state:
@@ -262,13 +291,13 @@ def build_svg(data: dict[str, Any]) -> str:
                 f'<text class="node-state" x="{node.x + 14}" y="{node.y + 15}">'
                 f'{escape(node.state)}</text>'
             )
-        stage_lines = textwrap.wrap(node.name, width=max(16, (node.width - 28) // 12))
+        stage_lines = textwrap.wrap(node.name, width=max(8 if icon else 16, (node.width - (74 if icon else 28)) // 12))
         if len(stage_lines) > 2:
             raise ValueError(f"{node.id}: stage title must fit two lines.")
         stage_y = node.y + (HEIGHT - (len(stage_lines) - 1) * 25) / 2 + (15 if node.state else 8)
-        parts.append(f'<text class="node-title stage-label" x="{node.x + 14}" y="{stage_y}">')
+        parts.append(f'<text class="node-title stage-label" x="{text_x}" y="{stage_y}">')
         for index, line in enumerate(stage_lines):
-            parts.append(f'<tspan x="{node.x + 14}" dy="{0 if index == 0 else 25}">{escape(line)}</tspan>')
+            parts.append(f'<tspan x="{text_x}" dy="{0 if index == 0 else 25}">{escape(line)}</tspan>')
         parts.append("</text>")
         parts.append("</g>")
     if conceptual:
@@ -364,7 +393,8 @@ def build_excalidraw(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None, refresh=False, roots=None) -> None:
+def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None, refresh=False, roots=None,
+          refresh_icons=False, offline_icons=False) -> None:
     project_root = project_root.resolve(strict=True)
     content = json.loads(input_path.read_text(encoding="utf-8"))
     principles = content.get("principles", {})
@@ -418,14 +448,23 @@ def build(input_path: Path, output_dir: Path, project_root: Path, overrides=None
     assets = ROOT if (ROOT / "presenter-template.html").exists() else ROOT.parent / "assets"
     template = (assets / "presenter-template.html").read_text(encoding="utf-8")
     design = resolve_design(project_root, input_path.resolve().parent, overrides, refresh, roots)
+    presenter = input_path.resolve().parent
+    profile = (overrides or {}).get("userLibrary") or design.get("userLibrary")
+    monitor(project_root, presenter, roots, profile, offline_icons)
+    icon_images = resolve_icons(views, presenter, project_root, roots, profile, refresh_icons)
+    icon_sources = read_json(presenter / "icons.lock.json")["icons"] if icon_images else {}
     theme = design_css(design)
     layouts = (assets / "layouts.css").read_text(encoding="utf-8")
-    diagrams = {name: build_svg(data) for name, data in views.items()}
+    diagrams = {name: build_svg(data, icon_images,
+                {node["service"]: icon_sources[node["service"]] for node in data["components"]
+                 if node.get("service") in icon_sources}) for name, data in views.items()}
     # Escape '<' so source text cannot terminate the embedded script element.
     embedded = json.dumps(views, ensure_ascii=True).replace("<", "\\u003c")
     embedded_diagrams = json.dumps(diagrams, ensure_ascii=True).replace("<", "\\u003c")
     embedded_insights = json.dumps(insights, ensure_ascii=True).replace("<", "\\u003c")
     replacements = {
+        "__ICONS__": json.dumps({key: {field: value[field] for field in ("source", "name", "packHash", "termsHash")}
+                                for key, value in icon_sources.items()}).replace("<", "\\u003c"),
         "__THEME__": theme,
         "__LAYOUTS__": layouts,
         "__DESIGN__": json.dumps({k: design[k] for k in ("settings", "themes", "layouts")}).replace("<", "\\u003c"),
@@ -469,9 +508,12 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--refresh-icons", action="store_true", help="Explicitly replace the selected icon snapshot from cache")
+    parser.add_argument("--offline-icons", action="store_true", help="Skip all approved pack update checks; use local snapshots/cache")
     add_design_arguments(parser)
     args = parser.parse_args()
     try:
-        build(args.input, args.output, args.project_root, argument_overrides(args), args.refresh_design)
+        build(args.input, args.output, args.project_root, argument_overrides(args), args.refresh_design,
+              refresh_icons=args.refresh_icons, offline_icons=args.offline_icons)
     except (ValueError, OSError) as error:
         parser.exit(2, f"{error}\n")

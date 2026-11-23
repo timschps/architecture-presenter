@@ -41,6 +41,11 @@ Component: `name`, `lines` array (up to 2 short exploration details),
 `x`, `y`, `width`, `evidence` array. State is APP, SOURCE, FOUNDATION, EXTERNAL or
 TARGET. The name must fit two stage lines. Match the repository to these labels,
 never mark a live resource from source alone.
+Optional component `service` is an explicit `azure:<id>`, `microsoft365:<id>`,
+`power-platform:<id>`, `github:<id>` or `octicons:<id>`. It selects an approved
+cached icon without changing the component's implementation state.
+See [Icon assets](ICON_ASSETS.md) for
+consent, actual catalogue IDs, ambiguous variants and portable icon locks.
 
 Flow: `from`, `to` component IDs, `path` using positive integer M/H/V commands,
 `label`, label `x`/`y`, `detail`, optional `until`. Flows cannot precede endpoints.

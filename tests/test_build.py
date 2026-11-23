@@ -63,6 +63,17 @@ class PresenterTests(unittest.TestCase):
         self.story["views"]["architecture"]["phases"][0]["evidence"] = ["README.md"]
         self.assertIn("README.md", self.generate())
 
+    def test_service_icons_are_explicit_and_unknown_services_keep_labels(self):
+        node = self.story["views"]["architecture"]["components"][0]
+        for service in (True, "https://example.invalid/icon.svg", "../icon", "azure:"):
+            node["service"] = service
+            with self.subTest(service=service), self.assertRaisesRegex(ValueError, "provider:service"):
+                self.generate()
+        node["service"] = "azure:not-in-the-catalogue"
+        page = self.generate()
+        self.assertNotIn('class="service-icon"', page)
+        self.assertIn(node["name"], page)
+
     def test_unknown_principle_and_early_flow_are_rejected(self):
         self.story["views"]["architecture"]["phases"][0]["principles"] = ["P99"]
         with self.assertRaisesRegex(ValueError, "known principle"):
