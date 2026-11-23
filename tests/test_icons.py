@@ -162,13 +162,13 @@ class IconTests(unittest.TestCase):
     def test_scoped_policy_override_and_busy_update_preserve_cache(self):
         _, _, user_cache = self.approve()
         _, policy, cache = self.approve(scope="project", updates="off")
-        self.assertNotEqual(cache, user_cache)
+        self.assertEqual(cache, user_cache)
         self.assertEqual(policy["updates"], "off")
         (cache / "update.lock").write_text("Busy")
         self.assertEqual(icons.check("azure", policy, cache, force=True)["status"], "busy")
         self.assertEqual(self.calls, [])
 
-    def test_cache_routing_uses_locked_profile_not_changed_device_default(self):
+    def test_cache_is_independent_of_theme_profile_and_user_approval_is_local(self):
         user = self.roots["user"]
         user.mkdir()
         work = self.root / "work"
@@ -180,6 +180,108 @@ class IconTests(unittest.TestCase):
         paths = icons.locations(self.project, self.presenter, self.roots)
         self.assertEqual(paths["user"], work)
         self.assertEqual(icons.locations(self.project, self.presenter, self.roots, "local")["user"], user)
+        self.approve()
+        _, cache = icons.stores(self.project, self.presenter, self.roots, "work")["azure"]
+        _, local = icons.stores(self.project, self.presenter, self.roots, "local")["azure"]
+        self.assertEqual(cache, local)
+        self.assertFalse(cache.is_relative_to(work))
+        self.assertTrue((user / "icons" / "approvals" / "azure.json").exists())
+        self.assertFalse((work / "icons").exists())
+
+    def test_shared_pack_reuse_does_not_widen_project_consent(self):
+        original, _, cache = self.approve(scope="project")
+        other = self.root / "other"
+        other.mkdir()
+        presenter = other / "architecture"
+        self.assertEqual(icons.resolve_icons(self.views(), presenter, other, self.roots), {})
+        self.assertEqual(self.calls, [])
+        result = icons.approve(other, presenter, "azure", original["termsHash"], "project", roots=self.roots)
+        self.assertEqual(result["packHash"], original["packHash"])
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls[0][0], icons.PROVIDERS["azure"]["source"])
+        self.calls.clear()
+        other_policy, other_cache = icons.stores(other, presenter, self.roots)["azure"]
+        self.assertEqual(other_cache, cache)
+        self.assertFalse(icons.check("azure", other_policy, other_cache)["checked"])
+        self.assertEqual(self.calls, [])
+        self.assertTrue(icons.resolve_icons(self.views(), presenter, other, self.roots, refresh=True))
+
+    def test_terms_versions_and_daily_state_cannot_cross_scope_consent(self):
+        original, old_policy, cache = self.approve()
+        old_bytes = svg()
+        self.terms = "New conditions require renewed consent."
+        self.pack = archive({"Function-Apps.svg": svg("#ff8800")})
+        self.etag = "new-terms-pack"
+        other = self.root / "other"
+        other.mkdir()
+        presenter = other / "architecture"
+        terms_hash = icons.metadata("azure")["termsHash"]
+        icons.approve(other, presenter, "azure", terms_hash, "project", roots=self.roots)
+        new_policy, new_cache = icons.stores(other, presenter, self.roots)["azure"]
+        self.calls.clear()
+        self.assertEqual(icons.check("azure", old_policy, cache)["status"], "terms-changed")
+        self.assertFalse(icons.check("azure", new_policy, new_cache)["checked"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(icons.resolve_icons(self.views(), self.presenter, self.project, self.roots)["azure:functions"], old_bytes)
+        self.assertEqual(icons.resolve_icons(self.views(), presenter, other, self.roots)["azure:functions"], svg("#ff8800"))
+        self.assertEqual(icons.read_pack(cache, "azure", original["termsHash"])["packHash"], original["packHash"])
+
+    def test_approved_legacy_cache_can_be_used_offline_and_copied_without_moving(self):
+        work = self.root / "work"
+        work.mkdir()
+        user = self.roots["user"]
+        user.mkdir()
+        icons.atomic_json(user / "libraries.json", {
+            "schemaVersion": 1, "default": "work", "profiles": {"work": str(work)}})
+        old_cache = work / "icons" / "cache" / "azure"
+        meta = icons.metadata("azure")
+        with icons.writing(old_cache):
+            original = icons.cache_pack(old_cache, meta)
+        icons.atomic_json(work / "icons" / "approvals" / "azure.json",
+                          {"schemaVersion": 1, "provider": "azure", "termsHash": meta["termsHash"], "updates": "auto"})
+        before = {p: p.read_bytes() for p in work.rglob("*") if p.is_file()}
+        self.calls.clear()
+        self.assertTrue(icons.resolve_icons(self.views(), self.presenter, self.project, self.roots))
+        result = icons.migrate(self.project, self.presenter, "azure", self.roots)
+        self.assertEqual(result["packHash"], original["packHash"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(before, {p: p.read_bytes() for p in work.rglob("*") if p.is_file()})
+        self.assertFalse((user / "icons" / "approvals" / "azure.json").exists())
+        _, cache = icons.stores(self.project, self.presenter, self.roots)["azure"]
+        self.assertFalse(cache.is_relative_to(work))
+        self.assertEqual(icons.read_pack(cache, "azure", meta["termsHash"])["packHash"], original["packHash"])
+
+    def test_device_paths_are_local_platform_cache_paths(self):
+        home = self.root / "home"
+        local = self.root / "local"
+        self.assertEqual(icons.device_root(platform="win32", env={"LOCALAPPDATA": str(local)}, home=home),
+                         local / "architecture-presenter")
+        self.assertEqual(icons.device_root(platform="darwin", env={}, home=home),
+                         home / "Library" / "Caches" / "architecture-presenter")
+        self.assertEqual(icons.device_root(platform="linux", env={"XDG_CACHE_HOME": "relative"}, home=home),
+                         home / ".cache" / "architecture-presenter")
+        self.assertEqual(icons.device_root(env={"ARCHITECTURE_PRESENTER_CONFIG_ROOT": str(self.root)}),
+                         self.root / "device")
+
+    def test_notify_then_auto_shares_discovery_but_can_download_once(self):
+        _, policy, cache = self.approve(updates="notify")
+        self.etag = "new-version"
+        state = icons.read_json(cache / "check.json")
+        now = state["attemptedAt"] + icons.INTERVAL
+        self.assertEqual(icons.check("azure", policy, cache, now=now)["status"], "update-review-needed")
+        self.calls.clear()
+        self.assertEqual(icons.check("azure", {**policy, "updates": "auto"}, cache, now=now + 1)["status"], "unchanged")
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls[0][0], "https://arch-center.azureedge.net/icons/test.zip")
+        self.calls.clear()
+        self.assertFalse(icons.check("azure", policy, cache, now=now + 2)["checked"])
+        self.assertEqual(self.calls, [])
+        unchanged = icons.check("azure", policy, cache, now=now + icons.INTERVAL + 1)
+        self.assertEqual(unchanged["status"], "unchanged")
+        self.calls.clear()
+        self.assertFalse(icons.check("azure", {**policy, "updates": "auto"}, cache,
+                                    now=now + icons.INTERVAL + 2)["checked"])
+        self.assertEqual(self.calls, [])
 
     def test_snapshot_rebuild_does_not_need_libraries_and_rejects_tampering(self):
         self.approve()
@@ -241,6 +343,150 @@ class IconTests(unittest.TestCase):
         asset.write_bytes(b"corrupted")
         self.assertEqual(icons.check("azure", policy, cache, force=True, download=True)["status"], "unchanged")
         self.assertEqual(asset.read_bytes(), svg())
+
+    def test_github_official_source_consent_and_variant_selection(self):
+        pack = archive({"GitHub_Invertocat_Black.svg": svg("#000000"),
+                        "GitHub_Invertocat_White.svg": svg("#ffffff")})
+        calls = []
+
+        def fetch(url, hosts, limit, headers=None, method="GET"):
+            calls.append(url)
+            if url == icons.PROVIDERS["github"]["source"]:
+                return (b'<h1>Logo</h1><a href="/GitHub_Logos.zip">Download the logo files</a>'
+                        b'<h2>Legal</h2><p>Use permitted logos only to link or show integration.</p>'), {}
+            if url == icons.PROVIDERS["github"]["guidelines"]:
+                return b'<h1>Co-branding</h1><p>Do not imply endorsement or modify logos.</p>', {}
+            self.assertEqual(url, "https://brand.github.com/GitHub_Logos.zip")
+            return pack, {}
+
+        with patch("icons.fetch", side_effect=fetch):
+            meta = icons.metadata("github")
+            with self.assertRaisesRegex(ValueError, "Terms changed"):
+                icons.approve(self.project, self.presenter, "github", "0" * 64, roots=self.roots)
+            self.assertFalse(any(url.endswith(".zip") for url in calls))
+            icons.approve(self.project, self.presenter, "github", meta["termsHash"], roots=self.roots)
+            views = {"system": {"components": [{"service": "github:github"}]}}
+            self.assertEqual(icons.resolve_icons(views, self.presenter, self.project, self.roots), {})
+            (self.presenter / "icon-selections.json").write_text(json.dumps({
+                "github:github": "GitHub_Invertocat_Black.svg"}))
+            selected = icons.resolve_icons(views, self.presenter, self.project, self.roots, refresh=True)
+            self.assertEqual(selected["github:github"], svg("#000000"))
+            self.assertIn("Do not imply endorsement", meta["terms"])
+
+    def test_github_supplementary_guidelines_changes_stop_downloads(self):
+        guide = "Linking and integration only."
+        calls = []
+
+        def fetch(url, hosts, limit, headers=None, method="GET"):
+            calls.append(url)
+            if url == icons.PROVIDERS["github"]["source"]:
+                return (b'<h1>Logo</h1><a href="/GitHub_Logos.zip">Download the logo files</a>'
+                        b'<h2>Legal</h2><p>Keep names nearby and respect trademarks.</p>'), {}
+            if url == icons.PROVIDERS["github"]["guidelines"]:
+                return f'<h1>Co-branding</h1><p>{guide}</p>'.encode(), {}
+            return archive({"GitHub_Invertocat_Black.svg": svg()}), {}
+
+        with patch("icons.fetch", side_effect=fetch):
+            meta = icons.metadata("github")
+            icons.approve(self.project, self.presenter, "github", meta["termsHash"], roots=self.roots)
+            policy, cache = icons.stores(self.project, self.presenter, self.roots)["github"]
+            guide = "Updated permission restrictions."
+            calls.clear()
+            self.assertEqual(icons.check("github", policy, cache, force=True)["status"], "terms-changed")
+            self.assertEqual(len(calls), 2)
+            self.assertFalse(any(url.endswith(".zip") for url in calls))
+
+    def test_github_source_must_have_legal_conditions_and_official_download(self):
+        with patch("icons.fetch", return_value=(
+                b'<h1>Logo</h1><a href="https://example.invalid/a.zip">Download the logo files</a>', {})):
+            with self.assertRaisesRegex(ValueError, "legal"):
+                icons.metadata("github")
+        def fetch(url, hosts, limit, headers=None, method="GET"):
+            if url == icons.PROVIDERS["github"]["guidelines"]:
+                return b'<h1>Co-branding</h1><p>Guidelines.</p>', {}
+            return (b'<h1>Logo</h1><h2>Legal</h2><p>Terms.</p>'
+                    b'<a href="https://example.invalid/a.zip">Download the logo files</a>'), {}
+        with patch("icons.fetch", side_effect=fetch), self.assertRaisesRegex(ValueError, "official HTTPS"):
+            icons.metadata("github")
+
+    def test_octicons_revision_changes_preserve_license_consent_and_filter_archive(self):
+        revision = "1" * 40
+        license_ = "MIT License\nCopyright GitHub\nPermission is hereby granted.\nTHE SOFTWARE IS PROVIDED AS IS."
+        calls = []
+        def fetch(url, hosts, limit, headers=None, method="GET"):
+            calls.append(url)
+            if url == icons.PROVIDERS["octicons"]["revision"]:
+                return json.dumps({"sha": revision}).encode(), {}
+            if url.endswith("/LICENSE"):
+                self.assertIn(revision, url)
+                return license_.encode(), {}
+            self.assertEqual(url, f"https://codeload.github.com/primer/octicons/zip/{revision}")
+            return archive({f"octicons-{revision}/icons/repo-16.svg": svg(),
+                            f"octicons-{revision}/docs/unrelated.svg": svg("#ffffff")}), {}
+        with patch("icons.fetch", side_effect=fetch):
+            first = icons.metadata("octicons")
+            revision = "2" * 40
+            second = icons.metadata("octicons")
+            self.assertEqual(first["termsHash"], second["termsHash"])
+            self.assertNotEqual(first["download"], second["download"])
+            current = icons.approve(self.project, self.presenter, "octicons", first["termsHash"], roots=self.roots)
+            self.assertEqual(len(current["items"]), 1)
+            selected = icons.resolve_icons({"ui": {"components": [{"service": "octicons:repo"}]}},
+                                          self.presenter, self.project, self.roots)
+            self.assertEqual(selected["octicons:repo"], svg())
+            self.assertIn("MIT License", current["terms"])
+            revision = "3" * 40
+            license_ += "\nChanged license conditions."
+            with self.assertRaisesRegex(ValueError, "Terms changed"):
+                icons.approve(self.project, self.presenter, "octicons", first["termsHash"], roots=self.roots)
+            self.assertNotIn(f"https://codeload.github.com/primer/octicons/zip/{revision}", calls)
+
+    def test_octicons_requires_an_immutable_revision_and_expected_license(self):
+        for revision in (None, "main", "a" * 39, "A" * 40):
+            with self.subTest(revision=revision), patch(
+                    "icons.fetch", return_value=(json.dumps({"sha": revision}).encode(), {})) as fetch:
+                with self.assertRaisesRegex(ValueError, "immutable"):
+                    icons.metadata("octicons")
+                self.assertEqual(fetch.call_count, 1)
+        with patch("icons.fetch", side_effect=[
+                (json.dumps({"sha": "a" * 40}).encode(), {}), (b"Unreviewed license", {})]) as fetch:
+            with self.assertRaisesRegex(ValueError, "expected Octicons license"):
+                icons.metadata("octicons")
+            self.assertEqual(fetch.call_count, 2)
+
+    def test_storage_cli_and_legacy_revocation_use_separate_policy_roots(self):
+        legacy = {"user": self.root / "legacy"}
+        current = self.roots["user"] / "icons" / "approvals" / "azure.json"
+        old = legacy["user"] / "icons" / "approvals" / "azure.json"
+        icons.atomic_json(current, {"test": "current"})
+        icons.atomic_json(old, {"test": "legacy"})
+        def run(*arguments):
+            with patch("sys.argv", ["icons.py", "--project-root", str(self.project),
+                                   "--user-library", "work", *arguments]), patch("sys.stdout", io.StringIO()) as output:
+                icons.main()
+                return output.getvalue()
+        with patch("icons.policy_locations", return_value=self.roots), \
+                patch("icons.locations", return_value=legacy) as locations, \
+                patch("icons.device_root", return_value=self.root / "device"):
+            storage = json.loads(run("storage"))
+            self.assertEqual(storage["cache"], str(self.root / "device" / "icons" / "cache"))
+            self.assertEqual(storage["approvals"]["user"], str(current.parent))
+            locations.assert_not_called()
+            run("revoke", "azure", "--scope", "user")
+            self.assertFalse(current.exists())
+            self.assertTrue(old.exists())
+            icons.atomic_json(current, {"test": "keep"})
+            run("revoke", "azure", "--scope", "user", "--legacy")
+            self.assertTrue(current.exists())
+            self.assertFalse(old.exists())
+            locations.assert_called_once_with(self.project.resolve(), self.presenter.resolve(), profile="work")
+
+    def test_inline_glyphs_cannot_inject_parent_styles_ids_or_behavior(self):
+        for injection in (b'<style>.node {display:none}</style>', b'<g id="arrow"/>',
+                          b'<path data-phase="999" d="M0 0"/>', b'<use href="#arrow"/>'):
+            with self.subTest(injection=injection), self.assertRaises(ValueError):
+                icons.safe_glyph(svg().replace(b"<path ", injection + b"<path "))
+        self.assertEqual(icons.safe_glyph(svg()), svg())
 
 
 if __name__ == "__main__":

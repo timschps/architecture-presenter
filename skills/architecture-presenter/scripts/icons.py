@@ -7,6 +7,8 @@ import hashlib
 from html.parser import HTMLParser
 import io
 import json
+import math
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -35,6 +37,16 @@ PROVIDERS = {
         "source": "https://learn.microsoft.com/en-us/power-platform/guidance/icons",
         "hosts": ("download.microsoft.com",),
     },
+    "github": {
+        "source": "https://brand.github.com/foundations/logo",
+        "guidelines": "https://brand.github.com/brand-identity/cobranding",
+        "hosts": ("brand.github.com",),
+    },
+    "octicons": {
+        "source": "https://github.com/primer/octicons",
+        "revision": "https://api.github.com/repos/primer/octicons/commits/main",
+        "hosts": ("codeload.github.com",),
+    },
 }
 ALIASES = {
     "azure": {
@@ -49,8 +61,14 @@ ALIASES = {
     },
     "microsoft365": {"teams": ("microsoft-teams", "teams"), "sharepoint": ("sharepoint",)},
     "power-platform": {"copilot-studio": ("copilot-studio", "microsoft-copilot-studio")},
+    "github": {"github": ("github-invertocat-black", "github-invertocat-white",
+                          "git-hub-invertocat-black", "git-hub-invertocat-white")},
+    "octicons": {"repo": ("repo-16",), "issues": ("issue-opened-16",),
+                "issue-opened": ("issue-opened-16",), "pull-request": ("git-pull-request-16",),
+                "actions": ("workflow-16",), "workflow": ("workflow-16",),
+                "codespaces": ("codespaces-16",), "copilot": ("copilot-16",)},
 }
-SERVICE = re.compile(r"(azure|microsoft365|power-platform):[a-z][a-z0-9-]{0,100}")
+SERVICE = re.compile(r"(azure|microsoft365|power-platform|github|octicons):[a-z][a-z0-9-]{0,100}")
 SHA = re.compile(r"[a-f0-9]{64}")
 MAX_PACK = 64 * 1024 * 1024
 MAX_SVG = 2 * 1024 * 1024
@@ -145,10 +163,15 @@ class Page(HTMLParser):
 
 
 def metadata(provider):
+    if provider == "octicons":
+        return octicons_metadata()
     definition = PROVIDERS[provider]
-    data, _ = fetch(definition["source"], ("learn.microsoft.com",), 3 * 1024 * 1024)
+    hosts = ("brand.github.com",) if provider == "github" else ("learn.microsoft.com",)
+    data, _ = fetch(definition["source"], hosts, 3 * 1024 * 1024)
     page = Page()
     page.feed(data.decode("utf-8-sig"))
+    if provider == "github":
+        return github_metadata(page)
     sections = []
     has_terms = False
     for heading, body in page.sections:
@@ -170,6 +193,58 @@ def metadata(provider):
     url = validate_url(links[0], definition["hosts"])
     terms = "\n".join(sections)
     return {"provider": provider, "source": definition["source"], "download": url,
+            "terms": terms, "termsHash": hashlib.sha256(terms.encode()).hexdigest()}
+
+
+def github_metadata(page):
+    definition = PROVIDERS["github"]
+    if not any(heading.lower() == "legal" for heading, _ in page.sections):
+        raise ValueError("Cannot identify GitHub logo legal conditions; manual review required.")
+
+    def content(document, title):
+        start = next((i for i, (heading, _) in enumerate(document.sections)
+                      if heading.lower() == title.lower()), None)
+        if start is None:
+            raise ValueError("Cannot identify GitHub brand guidelines; manual review required.")
+        parts = []
+        for heading, body in document.sections[start:]:
+            text = " ".join(body)
+            for _, label in document.links:
+                if "download" in label.lower():
+                    text = text.replace(label, "")
+            text = re.split(r"\bOn this page\b", text, maxsplit=1)[0]
+            parts.append(re.sub(r"\s+", " ", heading + " " + text).strip())
+        return "\n".join(parts)
+
+    data, _ = fetch(definition["guidelines"], ("brand.github.com",), 3 * 1024 * 1024)
+    guidelines = Page()
+    guidelines.feed(data.decode("utf-8-sig"))
+    terms = content(page, "Logo") + "\n" + definition["guidelines"] + "\n" + content(guidelines, "Co-branding")
+    links = {urljoin(definition["source"], href) for href, label in page.links
+             if re.search(r"download.*logo files", label, re.I)}
+    if len(links) != 1:
+        raise ValueError("Cannot identify one official GitHub logo pack; manual review required.")
+    download = validate_url(next(iter(links)), definition["hosts"])
+    return {"provider": "github", "source": definition["source"], "download": download,
+            "terms": terms, "termsHash": hashlib.sha256(terms.encode()).hexdigest()}
+
+
+def octicons_metadata():
+    definition = PROVIDERS["octicons"]
+    data, _ = fetch(definition["revision"], ("api.github.com",), 3 * 1024 * 1024)
+    payload = json.loads(data)
+    revision = payload.get("sha") if isinstance(payload, dict) else None
+    if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
+        raise ValueError("Cannot identify an immutable official Octicons revision.")
+    license_url = f"https://raw.githubusercontent.com/primer/octicons/{revision}/LICENSE"
+    data, _ = fetch(license_url, ("raw.githubusercontent.com",), 3 * 1024 * 1024)
+    license_ = data.decode("utf-8-sig").strip()
+    if any(text not in license_ for text in ("MIT License", "Copyright", "Permission is hereby granted",
+                                            "THE SOFTWARE IS PROVIDED")):
+        raise ValueError("Cannot identify the expected Octicons license; manual review required.")
+    terms = "Official GitHub Octicons UI glyphs, not product branding. Retain this license notice.\n" + license_
+    return {"provider": "octicons", "source": definition["source"],
+            "download": f"https://codeload.github.com/primer/octicons/zip/{revision}",
             "terms": terms, "termsHash": hashlib.sha256(terms.encode()).hexdigest()}
 
 
@@ -215,6 +290,23 @@ def safe_css(value):
             raise ValueError("SVG CSS external resources are not allowed.")
 
 
+def safe_glyph(data):
+    safe_svg(data)
+    root = ET.fromstring(data.decode("utf-8-sig"))
+    shapes = {"svg", "path", "g", "circle", "rect", "ellipse", "line", "polyline", "polygon"}
+    attributes = {"width", "height", "viewBox", "d", "fill", "stroke", "stroke-width",
+                  "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray",
+                  "stroke-dashoffset", "fill-rule", "clip-rule", "transform", "opacity",
+                  "x", "y", "cx", "cy", "rx", "ry", "r", "points", "x1", "x2", "y1", "y2",
+                  "preserveAspectRatio"}
+    for element in root.iter():
+        if (element.tag not in {f"{{http://www.w3.org/2000/svg}}{name}" for name in shapes}
+                or any(attribute not in attributes or re.search(r"url\s*\(", value, re.I)
+                       for attribute, value in element.attrib.items())):
+            raise ValueError("Inline UI glyphs support isolated vector shapes only, without styles or IDs.")
+    return data
+
+
 def slug(filename):
     value = PurePosixPath(filename).stem
     value = re.sub(r"^\d+-icon-service-", "", value, flags=re.I)
@@ -224,7 +316,7 @@ def slug(filename):
     return re.sub(r"[^a-z0-9]+", "-", value).strip("-")
 
 
-def unpack(data, destination):
+def unpack(data, destination, provider=None):
     items, rejected = [], []
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         entries = archive.infolist()
@@ -237,11 +329,13 @@ def unpack(data, destination):
                 raise ValueError("Unsafe icon archive path, symlink or encrypted entry.")
             if item.is_dir() or path.suffix.lower() != ".svg" or "__MACOSX" in path.parts:
                 continue
+            if provider == "octicons" and (len(path.parts) != 3 or path.parts[1] != "icons"):
+                continue
             if item.file_size > MAX_SVG:
                 rejected.append(item.filename)
                 continue
             try:
-                svg = safe_svg(archive.read(item))
+                svg = (safe_glyph if provider == "octicons" else safe_svg)(archive.read(item))
             except (RuntimeError, NotImplementedError) as error:
                 raise ValueError("Unsupported icon archive compression.") from error
             except (ValueError, ET.ParseError, UnicodeError):
@@ -282,7 +376,7 @@ def cache_pack(cache, meta, previous=None, force=False):
     destination = contained(cache, cache / hash_)
     with tempfile.TemporaryDirectory(dir=cache) as temporary:
         staging = Path(temporary)
-        items, rejected = unpack(data, staging)
+        items, rejected = unpack(data, staging, meta["provider"])
         destination.mkdir(exist_ok=True)
         for file in staging.iterdir():
             target = contained(cache, destination / file.name)
@@ -294,6 +388,7 @@ def cache_pack(cache, meta, previous=None, force=False):
               "etag": response.get("etag"), "modified": response.get("last-modified"),
               "downloadedAt": datetime.now(timezone.utc).isoformat()}
     atomic_json(cache / "current.json", result)
+    atomic_json(cache / "manifests" / f"{meta['termsHash']}.json", result)
     return result
 
 
@@ -329,6 +424,7 @@ def cached_manifest(path, provider):
 
 
 def locations(project, presenter, roots=None, profile=None):
+    """Legacy theme-library locations, used only for compatibility and migration."""
     library = Library(project, presenter, roots)
     lock = Path(presenter) / "design.lock.json"
     if profile is None and lock.exists():
@@ -337,9 +433,42 @@ def locations(project, presenter, roots=None, profile=None):
     return library.roots
 
 
+def device_root(roots=None, platform=None, env=None, home=None):
+    env = os.environ if env is None else env
+    home = Path.home() if home is None else Path(home)
+    platform = platform or sys.platform
+    if roots is not None:
+        return Path(roots["device"]) if "device" in roots else (
+            Path(roots["user"]).parent / "device" if "user" in roots else None)
+    if env.get("ARCHITECTURE_PRESENTER_CONFIG_ROOT"):
+        result = Path(env["ARCHITECTURE_PRESENTER_CONFIG_ROOT"]) / "device"
+    elif platform == "win32":
+        result = Path(env.get("LOCALAPPDATA", home / "AppData" / "Local")) / "architecture-presenter"
+    elif platform == "darwin":
+        result = home / "Library" / "Caches" / "architecture-presenter"
+    else:
+        base = Path(env.get("XDG_CACHE_HOME", home / ".cache"))
+        result = (base if base.is_absolute() else home / ".cache") / "architecture-presenter"
+    if not result.is_absolute():
+        raise ValueError("Device icon cache root must be absolute.")
+    return result
+
+
+def provider_cache(provider, roots=None):
+    root = device_root(roots)
+    if root is None:
+        raise ValueError("Device icon cache is unavailable in this isolated configuration.")
+    return contained(root, root / "icons" / "cache" / provider)
+
+
+def policy_locations(project, presenter, roots=None):
+    return Library(project, presenter, roots).roots
+
+
 def stores(project, presenter, roots=None, profile=None):
     result = {}
-    paths = locations(project, presenter, roots, profile)
+    paths = policy_locations(project, presenter, roots)
+    legacy = None
     for provider in PROVIDERS:
         for scope in ("project", "repo", "user", "machine"):
             if scope not in paths:
@@ -347,39 +476,152 @@ def stores(project, presenter, roots=None, profile=None):
             root = paths[scope]
             path = contained(root, root / "icons" / "approvals" / f"{provider}.json")
             if path.is_file():
-                result[provider] = (approval(path, provider),
-                                    contained(root, root / "icons" / "cache" / provider))
+                result[provider] = (approval(path, provider), provider_cache(provider, roots))
                 break
+            if scope == "user":
+                if legacy is None:
+                    try:
+                        legacy = locations(project, presenter, roots, profile)
+                    except (OSError, ValueError):
+                        legacy = {}
+                if "user" in legacy and legacy["user"] != root:
+                    old = contained(legacy["user"], legacy["user"] / "icons" / "approvals" / f"{provider}.json")
+                    if old.is_file():
+                        result[provider] = (approval(old, provider), provider_cache(provider, roots))
+                        break
     return result
+
+
+def read_pack(cache, provider, terms_hash):
+    current_path = cache / "current.json"
+    current = cached_manifest(current_path, provider) if current_path.exists() else None
+    if current is not None and current["termsHash"] == terms_hash:
+        return current
+    path = contained(cache, cache / "manifests" / f"{terms_hash}.json")
+    if path.exists():
+        current = cached_manifest(path, provider)
+        if current["termsHash"] != terms_hash:
+            raise ValueError("Cached icon manifest does not match its approved terms identity.")
+        return current
+    return None
+
+
+def legacy_pack(project, presenter, provider, terms_hash, roots=None, profile=None):
+    paths = policy_locations(project, presenter, roots)
+    candidates = [paths[key] for key in ("project", "repo", "user", "machine") if key in paths]
+    try:
+        legacy = locations(project, presenter, roots, profile)
+        if "user" in legacy and legacy["user"] not in candidates:
+            candidates.append(legacy["user"])
+    except (OSError, ValueError):
+        pass
+    for root in candidates:
+        cache = contained(root, root / "icons" / "cache" / provider)
+        path = cache / "current.json"
+        if path.exists():
+            current = cached_manifest(path, provider)
+            if current["termsHash"] == terms_hash:
+                return current, cache
+    return None, None
+
+
+def migrate(project, presenter, provider, roots=None, profile=None):
+    available = stores(project, presenter, roots, profile)
+    if provider not in available:
+        raise ValueError("Migration requires an existing scoped provider approval.")
+    policy, cache = available[provider]
+    current, old_cache = legacy_pack(project, presenter, provider, policy["termsHash"], roots, profile)
+    if current is None:
+        raise ValueError("No matching approved legacy pack is available.")
+    with writing(cache):
+        destination = contained(cache, cache / current["packHash"])
+        with tempfile.TemporaryDirectory(dir=cache) as temporary:
+            staging = Path(temporary)
+            for item in current["items"]:
+                name = f"{item['sha256']}.svg"
+                source = contained(old_cache, old_cache / current["packHash"] / name)
+                data = (safe_glyph if provider == "octicons" else safe_svg)(source.read_bytes())
+                if hashlib.sha256(data).hexdigest() != item["sha256"]:
+                    raise ValueError("Legacy cache bytes changed; migration stopped.")
+                (staging / name).write_bytes(data)
+            destination.mkdir(exist_ok=True)
+            for file in staging.iterdir():
+                target = contained(cache, destination / file.name)
+                if target.exists() and target.read_bytes() != file.read_bytes():
+                    raise ValueError("Refusing to overwrite changed central cache bytes during migration.")
+                shutil.copy2(file, target)
+        atomic_json(cache / "manifests" / f"{policy['termsHash']}.json", current)
+        if not (cache / "current.json").exists():
+            atomic_json(cache / "current.json", current)
+    return current
+
+
+def check_state(path):
+    value = read_json(path) if path.exists() else {}
+    if (not isinstance(value, dict) or (value and
+            (type(value.get("attemptedAt")) not in (int, float) or not math.isfinite(value["attemptedAt"])))):
+        raise ValueError("Invalid icon check state; inspect the device cache.")
+    return value
+
+
+def discover(provider, cache, force, now):
+    path = cache / "metadata.json"
+    state = check_state(path)
+    if force or not state or now - state["attemptedAt"] >= INTERVAL:
+        state = {"attemptedAt": now}
+        try:
+            state["metadata"] = metadata(provider)
+        except (OSError, ValueError) as error:
+            state["error"] = str(error)
+        atomic_json(path, state)
+    if "error" in state:
+        raise ValueError(state["error"])
+    meta = state.get("metadata")
+    if (not isinstance(meta, dict) or meta.get("provider") != provider
+            or meta.get("source") != PROVIDERS[provider]["source"]
+            or not isinstance(meta.get("terms"), str)
+            or meta.get("termsHash") != hashlib.sha256(meta["terms"].encode()).hexdigest()):
+        raise ValueError("Invalid cached provider metadata.")
+    validate_url(meta["download"], PROVIDERS[provider]["hosts"])
+    return meta
 
 
 def check(provider, policy, cache, force=False, download=False, now=None):
     now = time.time() if now is None else now
     state_path = cache / "check.json"
-    state = read_json(state_path) if state_path.exists() else {}
-    if not isinstance(state, dict) or (state and not isinstance(state.get("attemptedAt"), (int, float))):
-        raise ValueError("Invalid icon check state; inspect the local cache.")
     if policy["updates"] == "off" and not force:
         return {"provider": provider, "status": "off"}
-    if state and not force and now - state.get("attemptedAt", 0) < INTERVAL:
-        return {**state, "provider": provider, "checked": False}
     try:
         with writing(cache):
-            result = {"provider": provider, "attemptedAt": now, "checked": True}
-            # Count failed attempts too, avoiding repeated network calls when offline.
-            atomic_json(state_path, {**result, "status": "checking"})
+            state = check_state(state_path)
+            fresh = state and now - state["attemptedAt"] < INTERVAL
+            same_terms = state.get("approvedTermsHash") == policy["termsHash"]
+            discovery = check_state(cache / "metadata.json")
+            known = discovery.get("metadata", {})
+            if not isinstance(known, dict):
+                raise ValueError("Invalid cached provider metadata.")
+            known_terms = known.get("termsHash", policy["termsHash"])
+            needs_download = (state.get("updates") == "notify" and state.get("status") == "update-review-needed"
+                              and (policy["updates"] == "auto" or download))
+            if fresh and same_terms and known_terms == policy["termsHash"] and not force and (
+                    not needs_download or state.get("status") in ("unavailable", "checking")):
+                return {**state, "provider": provider, "checked": False}
+            result = {"provider": provider, "attemptedAt": now, "checked": True,
+                      "approvedTermsHash": policy["termsHash"], "updates": policy["updates"]}
             try:
-                meta = metadata(provider)
-                current_path = cache / "current.json"
+                meta = discover(provider, cache, force, now)
+                if meta["termsHash"] != policy["termsHash"]:
+                    result.update(status="terms-changed", termsHash=meta["termsHash"],
+                                  checked=force or not discovery or now - discovery["attemptedAt"] >= INTERVAL)
+                    return result
                 try:
-                    previous = cached_manifest(current_path, provider) if current_path.exists() else None
+                    previous = read_pack(cache, provider, policy["termsHash"])
                 except ValueError:
                     if not download:
                         raise
                     previous = None
-                if meta["termsHash"] != policy["termsHash"]:
-                    result.update(status="terms-changed", termsHash=meta["termsHash"])
-                elif policy["updates"] == "auto" or download:
+                if policy["updates"] == "auto" or download:
+                    atomic_json(state_path, {**result, "status": "checking"})
                     current = cache_pack(cache, meta, previous, force=force)
                     result.update(status="updated" if not previous or current["packHash"] != previous["packHash"]
                                   else "unchanged", packHash=current["packHash"])
@@ -417,19 +659,28 @@ def approve(project, presenter, provider, terms_hash, scope="project", updates="
     if provider not in PROVIDERS or updates not in ("auto", "notify", "off"):
         raise ValueError("Choose an official provider and a supported update policy.")
     meta = metadata(provider)
+    attempted = time.time()
     if meta["termsHash"] != terms_hash:
         raise ValueError("Terms changed or were not accepted. Inspect and approve the current terms hash.")
-    paths = locations(project, presenter, roots, profile)
+    paths = policy_locations(project, presenter, roots)
     if scope not in paths:
         raise ValueError("Selected approval scope is unavailable.")
     root = paths[scope]
-    cache = contained(root, root / "icons" / "cache" / provider)
+    cache = provider_cache(provider, roots)
     with writing(cache):
-        result = cache_pack(cache, meta)
+        previous = read_pack(cache, provider, terms_hash)
+        state = check_state(cache / "check.json")
+        reuse = (previous is not None and previous["download"] == meta["download"]
+                 and state.get("approvedTermsHash") == terms_hash
+                 and time.time() - state.get("attemptedAt", 0) < INTERVAL
+                 and state.get("status") in ("approved", "updated", "unchanged"))
+        result = previous if reuse else cache_pack(cache, meta, previous)
         atomic_json(contained(root, root / "icons" / "approvals" / f"{provider}.json"),
                     {"schemaVersion": 1, "provider": provider, "termsHash": terms_hash, "updates": updates})
-        atomic_json(cache / "check.json", {"provider": provider, "attemptedAt": time.time(),
-                                         "status": "approved", "packHash": result["packHash"]})
+        atomic_json(cache / "check.json", {"provider": provider, "attemptedAt": attempted,
+                                         "status": "approved", "packHash": result["packHash"],
+                                         "approvedTermsHash": terms_hash, "updates": updates})
+        atomic_json(cache / "metadata.json", {"attemptedAt": attempted, "metadata": meta})
     return result
 
 
@@ -453,7 +704,7 @@ def load_snapshot(presenter, lock, services, choices):
             raise ValueError("Invalid locked icon provenance.")
         validate_url(item["download"], PROVIDERS[provider]["hosts"])
         path = contained(presenter, presenter / "icon-assets" / f"{item['sha256']}.svg")
-        data = safe_svg(path.read_bytes())
+        data = (safe_glyph if provider == "octicons" else safe_svg)(path.read_bytes())
         if hashlib.sha256(data).hexdigest() != item["sha256"]:
             raise ValueError("Locked icon bytes changed; restore them or use --refresh-icons.")
         result[service] = data
@@ -485,13 +736,14 @@ def resolve_icons(views, presenter, project, roots=None, profile=None, refresh=F
             print(f"Icons: {service} has no approved cache; retaining its text label.", file=sys.stderr)
             continue
         policy, cache = available[provider]
-        current_path = cache / "current.json"
-        if not current_path.exists():
+        current = read_pack(cache, provider, policy["termsHash"])
+        if current is None:
+            current, legacy_cache = legacy_pack(project, presenter, provider, policy["termsHash"], roots, profile)
+            if current is not None:
+                cache = legacy_cache
+        if current is None:
             print(f"Icons: {service} is not cached; explicitly fetch the approved pack.", file=sys.stderr)
             continue
-        current = cached_manifest(current_path, provider)
-        if current["termsHash"] != policy["termsHash"]:
-            raise ValueError("Cached icon terms differ from approval; inspect and approve explicitly.")
         names = {id_, *ALIASES.get(provider, {}).get(id_, ())}
         matches = [item for item in current["items"] if
                    (item["name"] == choices[service] if service in choices else slug(item["name"]) in names)]
@@ -502,7 +754,7 @@ def resolve_icons(views, presenter, project, roots=None, profile=None, refresh=F
             continue
         item = next(iter(matches.values()))
         path = contained(cache, cache / current["packHash"] / f"{item['sha256']}.svg")
-        data = safe_svg(path.read_bytes())
+        data = (safe_glyph if provider == "octicons" else safe_svg)(path.read_bytes())
         if hashlib.sha256(data).hexdigest() != item["sha256"]:
             raise ValueError("Cached icon hash mismatch; fetch a clean pack.")
         destination = contained(presenter, presenter / "icon-assets" / f"{item['sha256']}.svg")
@@ -532,6 +784,9 @@ def main():
     accept.add_argument("--terms-hash", required=True, help="Exact termsHash displayed by inspect")
     accept.add_argument("--scope", choices=("project", "repo", "user", "machine"), default="project")
     accept.add_argument("--updates", choices=("auto", "notify", "off"), default="auto")
+    sub.add_parser("storage", help="Show device cache and scoped approval locations without downloading")
+    migration = sub.add_parser("migrate", help="Copy an approved legacy cache without moving files or widening consent")
+    migration.add_argument("provider", choices=PROVIDERS)
     for command in ("check", "fetch", "list", "revoke"):
         child = sub.add_parser(command)
         child.add_argument("provider", choices=PROVIDERS)
@@ -539,6 +794,7 @@ def main():
             child.add_argument("--force", action="store_true", help="Check even within the daily interval")
         if command == "revoke":
             child.add_argument("--scope", choices=("project", "repo", "user", "machine"), default="project")
+            child.add_argument("--legacy", action="store_true", help="Remove approval from the selected legacy theme-library scope")
     args = parser.parse_args()
     project = args.project_root.resolve(strict=True)
     presenter = (args.presenter_dir or project / "architecture").resolve()
@@ -549,25 +805,40 @@ def main():
             print(json.dumps({key: value["source"] for key, value in PROVIDERS.items()}, indent=2))
         elif args.command == "inspect":
             print(json.dumps(metadata(args.provider), indent=2))
+        elif args.command == "storage":
+            paths = policy_locations(project, presenter)
+            print(json.dumps({"cache": str(device_root() / "icons" / "cache"),
+                              "approvals": {key: str(paths[key] / "icons" / "approvals")
+                                            for key in ("project", "repo", "user", "machine") if key in paths}}, indent=2))
+        elif args.command == "migrate":
+            result = migrate(project, presenter, args.provider, profile=args.user_library)
+            print(f"Copied {len(result['items'])} cached SVGs to device storage. Original files and approvals are unchanged.")
         elif args.command == "approve":
             result = approve(project, presenter, args.provider, args.terms_hash, args.scope,
                              args.updates, profile=args.user_library)
             print(f"Approved and cached {args.provider}: {result['packHash']}. "
                   f"{len(result['items'])} SVGs supported; {len(result['rejected'])} rejected.")
         elif args.command == "revoke":
-            paths = locations(project, presenter, profile=args.user_library)
+            paths = (locations(project, presenter, profile=args.user_library) if args.legacy
+                     else policy_locations(project, presenter))
             path = contained(paths[args.scope], paths[args.scope] / "icons" / "approvals" / f"{args.provider}.json")
             path.unlink(missing_ok=True)
-            print("Removed this scope's approval. Lower scopes may still approve the provider; inspect them too.")
+            print("Removed this scope's approval. Lower scopes or legacy-profile approvals may still apply; inspect them too.")
         else:
             available = stores(project, presenter, profile=args.user_library)
             if args.provider not in available:
                 raise ValueError("Provider has no approval; inspect its terms, then explicitly approve.")
             policy, cache = available[args.provider]
             if args.command == "list":
+                current = read_pack(cache, args.provider, policy["termsHash"])
+                if current is None:
+                    current, _ = legacy_pack(project, presenter, args.provider, policy["termsHash"],
+                                             profile=args.user_library)
+                if current is None:
+                    raise ValueError("Approved pack is not cached; explicitly fetch it.")
                 print(json.dumps([{**item, "id": slug(item["name"]),
                                    "serviceId": args.provider + ":" + slug(item["name"])}
-                                  for item in cached_manifest(cache / "current.json", args.provider)["items"]], indent=2))
+                                  for item in current["items"]], indent=2))
             else:
                 result = check(args.provider, policy, cache, args.force or args.command == "fetch",
                                args.command == "fetch")

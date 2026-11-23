@@ -11,7 +11,8 @@ import math
 from pathlib import Path
 import re
 import textwrap
-from icons import SERVICE, monitor, resolve_icons
+import xml.etree.ElementTree as ET
+from icons import SERVICE, monitor, resolve_icons, safe_glyph
 from typing import Any
 from design_config import (
     add_design_arguments, argument_overrides, design_css, read_json, resolve_design, theme_variables,
@@ -64,6 +65,9 @@ svg { font-family: var(--cp-font); }
 .edge[data-alternative="true"] path:not(.edge-hit) { stroke-dasharray: 7 6; }
 .trace-cursor { fill: var(--cp-accent); stroke: var(--cp-accent-fg); stroke-width: 3; pointer-events: none; }
 .service-icon { pointer-events: none; }
+.service-glyph { color: var(--cp-fg); fill: currentColor; }
+.service-glyph [fill]:not([fill="none"]) { fill: currentColor; }
+.service-glyph [stroke]:not([stroke="none"]) { stroke: currentColor; }
 .future, .future path.edge-hit { pointer-events: none; }
 [data-phase] { transition: opacity .35s ease; }
 @media (prefers-reduced-motion: reduce) { [data-phase] { transition: none; } }
@@ -261,9 +265,18 @@ def build_svg(data: dict[str, Any], icons=None, icon_sources=None) -> str:
             f'width="{node.width}" height="{HEIGHT}" rx="4"/>'
         )
         if icon:
-            parts.append(f'<image class="service-icon" x="{node.x + 14}" y="{node.y + 28}" '
-                         f'width="32" height="32" preserveAspectRatio="xMidYMid meet" aria-hidden="true" '
-                         f'href="data:image/svg+xml;base64,{base64.b64encode(icon).decode()}"/>')
+            if node.service.startswith("octicons:"):
+                safe_glyph(icon)
+                glyph = ET.fromstring(icon.decode("utf-8-sig"))
+                glyph.attrib.update({"class": "service-icon service-glyph", "x": str(node.x + 14),
+                                     "y": str(node.y + 28), "width": "32", "height": "32",
+                                     "preserveAspectRatio": "xMidYMid meet", "aria-hidden": "true"})
+                ET.register_namespace("", "http://www.w3.org/2000/svg")
+                parts.append(ET.tostring(glyph, encoding="unicode"))
+            else:
+                parts.append(f'<image class="service-icon" x="{node.x + 14}" y="{node.y + 28}" '
+                             f'width="32" height="32" preserveAspectRatio="xMidYMid meet" aria-hidden="true" '
+                             f'href="data:image/svg+xml;base64,{base64.b64encode(icon).decode()}"/>')
         parts.append(
             f'<text class="node-title" x="{text_x}" y="{node.y + (33 if node.state else 25)}">'
             f'{escape(node.name)}</text>'

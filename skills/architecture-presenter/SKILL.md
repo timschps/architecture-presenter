@@ -92,11 +92,23 @@ broader visual guidance, but must not generate a competing presenter engine.
    For unambiguous Microsoft products identified in source or the user's story,
    suggest/use approved catalogue matches and add their service IDs. Do not
    infer Azure/Microsoft products from generic labels such as "database".
+   Use `github` for permitted GitHub brand-logo use; use `octicons` for repositories,
+   issues, PRs and workflow/UI symbols. Do not present UI glyphs as product logos
+   or assume GitHub's brand pack grants general diagram/marketing rights.
+   Keep the Octicons MIT notice. Its UI glyphs follow the theme foreground;
+   brand logos are not recolored.
+   All scopes share a per-user device-local icon cache outside synced theme
+   libraries and the installed plugin. Shared files do not grant consent.
+   Recommend explicit user-scope approval for cross-project reuse when the
+   user wants it, otherwise retain project scope. Inspect `icons.py storage`.
+   Legacy approved caches are readable; `icons.py migrate` copies verified
+   assets without moving files or widening approval. Never silently move
+   OneDrive themes, cache folders or consent policies.
    Approved `auto` policies check on tool use at most once daily and cache
    newer packs only under unchanged terms. Changed terms require renewed consent.
    Existing `icons.lock.json` snapshots stay pinned until `--refresh-icons`.
    Use `--offline-icons` when no network checks are permitted. No idle monitor
-   or scheduler is installed. Preserve original colors/proportions and fixed
+   or scheduler is installed. Preserve original brand colors, asset proportions and fixed
    map geometry; icons are not evidence of implementation or deployment.
 6. Generate with the copied engine (substitute the chosen folder when different):
    `python architecture\build.py --input architecture\story.json --project-root <project> --output architecture`.

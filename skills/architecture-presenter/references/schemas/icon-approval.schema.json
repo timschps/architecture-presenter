@@ -6,7 +6,7 @@
   "required": ["schemaVersion", "provider", "termsHash", "updates"],
   "properties": {
     "schemaVersion": {"const": 1},
-    "provider": {"enum": ["azure", "microsoft365", "power-platform"]},
+    "provider": {"enum": ["azure", "microsoft365", "power-platform", "github", "octicons"]},
     "termsHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "updates": {"enum": ["auto", "notify", "off"]}
   }
